@@ -1,0 +1,14 @@
+{
+  "steps": [
+    {
+      "command": "npm test --if-present",
+      "duration_ms": 2871,
+      "ended_utc": "2026-02-17T19:57:20.671721+00:00",
+      "exit_code": 1,
+      "feature": "test",
+      "log": "/Users/anton/Code/Dagifier/CI/last/logs/test.log",
+      "started_utc": "2026-02-17T19:57:17.800191+00:00",
+      "status": "fail"
+    }
+  ]
+}

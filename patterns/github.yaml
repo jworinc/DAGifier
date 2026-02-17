@@ -1,0 +1,11 @@
+domain: github.com
+selectors:
+  root: ".js-discussion, .js-comments-holder"
+  item: ".timeline-comment, .review-comment"
+  author: ".author"
+  body: ".comment-body"
+  depthMethod: "nested"
+filters:
+  - ".timeline-comment-actions"
+  - ".reactions-menu"
+  - "summary"

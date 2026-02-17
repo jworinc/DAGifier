@@ -11,20 +11,37 @@ export interface PatternPack {
         author?: string;
         body?: string;
         depth?: string;
+        depthMethod?: 'attr' | 'query' | 'nested';
+        depthMath?: string; // e.g. "x / 40"
     };
     filters?: string[];
+}
+
+export interface DomainState {
+    provider?: 'fetch' | 'playwright' | 'firecrawl';
+    lastSuccess?: string;
+    packVersion?: string;
+    selectors?: any;
+    score?: number;
+    needsRendering?: boolean;
 }
 
 export class PatternEngine {
     private packs: Map<string, PatternPack> = new Map();
     private patternsDir: string;
 
-    private state: Record<string, any> = {};
+    private state: Record<string, DomainState> = {};
     private statePath: string;
 
     constructor(patternsDir: string) {
         this.patternsDir = patternsDir;
         this.statePath = path.join(os.homedir(), '.dagifier', 'site-state.json');
+    }
+
+    addPack(pack: PatternPack) {
+        if (pack.domain) {
+            this.packs.set(pack.domain, pack);
+        }
     }
 
     async loadPacks() {
@@ -41,7 +58,7 @@ export class PatternEngine {
             }
             await this.loadState();
         } catch (error) {
-            // If directory doesn't exist yet, that's fine
+            console.error(`[PatternEngine] Error loading packs from ${this.patternsDir}: ${error}`);
         }
     }
 
@@ -54,8 +71,8 @@ export class PatternEngine {
         }
     }
 
-    async saveDomainState(domain: string, data: any) {
-        this.state[domain] = { ...this.state[domain], ...data, lastUsed: new Date().toISOString() };
+    async saveDomainState(domain: string, data: Partial<DomainState>) {
+        this.state[domain] = { ...this.state[domain], ...data, lastSuccess: new Date().toISOString() };
         try {
             await fs.mkdir(path.dirname(this.statePath), { recursive: true });
             await fs.writeFile(this.statePath, JSON.stringify(this.state, null, 2));
@@ -68,6 +85,21 @@ export class PatternEngine {
         try {
             const domain = new URL(url).hostname.replace('www.', '');
             return this.packs.get(domain);
+        } catch {
+            // Fallback: check if the input string contains any of our domain keys or their base names
+            for (const [domain, pack] of this.packs.entries()) {
+                if (url.includes(domain)) return pack;
+                const base = domain.split('.')[0];
+                if (base && url.includes(base)) return pack;
+            }
+            return undefined;
+        }
+    }
+
+    async getDomainState(url: string): Promise<DomainState | undefined> {
+        try {
+            const domain = new URL(url).hostname.replace('www.', '');
+            return this.state[domain];
         } catch {
             return undefined;
         }

@@ -1,0 +1,10 @@
+version: 2
+repo: Dagifier
+name: Dagifier
+archetype: spa
+contract_version: 1.0.0
+commands:
+  test: node -e "const s=require('./package.json').scripts||{}; if(!s.test){console.error('missing
+    test script'); process.exit(2)}" && npm test -- --watch=false
+  check: node -e "const s=require('./package.json').scripts||{}; if(!(s.lint||s.typecheck||s.check)){process.exit(2)}"
+    && (npm run -s lint || npm run -s typecheck || npm run -s check)

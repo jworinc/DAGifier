@@ -4,6 +4,12 @@ import { IngestionPayload } from '../types';
 import { fileTypeFromBuffer } from 'file-type';
 
 export class Ingestor {
+    private isHtml(buffer: Buffer, path?: string): boolean {
+        if (path?.endsWith('.html') || path?.endsWith('.htm')) return true;
+        const content = buffer.toString('utf-8').toLowerCase().trim();
+        return content.startsWith('<!doctype html') || content.includes('<html>') || content.includes('<body');
+    }
+
     async fromUrl(url: string): Promise<IngestionPayload> {
         const response = await axios.get(url, {
             responseType: 'arraybuffer',
@@ -13,24 +19,34 @@ export class Ingestor {
         });
         const buffer = Buffer.from(response.data);
         const type = await fileTypeFromBuffer(buffer);
+        let mimeType = type?.mime || response.headers['content-type'];
+
+        if (!mimeType && this.isHtml(buffer, url)) {
+            mimeType = 'text/html';
+        }
 
         return {
             source: 'url',
             identifier: url,
             rawContent: buffer,
-            mimeType: type?.mime || response.headers['content-type']
+            mimeType
         };
     }
 
     async fromFile(path: string): Promise<IngestionPayload> {
         const buffer = await fs.readFile(path);
         const type = await fileTypeFromBuffer(buffer);
+        let mimeType = type?.mime;
+
+        if (!mimeType && this.isHtml(buffer, path)) {
+            mimeType = 'text/html';
+        }
 
         return {
             source: 'file',
             identifier: path,
             rawContent: buffer,
-            mimeType: type?.mime
+            mimeType
         };
     }
 

@@ -1,0 +1,17 @@
+{
+  "env": {
+    "code_root": "",
+    "codex_root": "",
+    "cwd": "/Users/anton/Code/Dagifier",
+    "platform": "darwin",
+    "python": "3.14.2"
+  },
+  "features": [
+    "test"
+  ],
+  "repo": "Dagifier",
+  "required_for_good": [
+    "check"
+  ],
+  "timestamp_utc": "2026-02-17T19:57:20.671882+00:00"
+}

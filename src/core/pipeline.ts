@@ -1,5 +1,8 @@
 import { parse, HTMLElement } from 'node-html-parser';
-import { PageDoc, ContentBlock, Trace, TraceStep, IngestionPayload } from '../types';
+import { JSDOM } from 'jsdom';
+import { Readability } from '@mozilla/readability';
+import * as linkedom from 'linkedom';
+import { PageDoc, ContentBlock, Trace, TraceStep, IngestionPayload, LinkRef } from '../types';
 import { PatternPack } from './patterns';
 
 export class ExtractionPipeline {
@@ -23,35 +26,172 @@ export class ExtractionPipeline {
         });
     }
 
-    async process(payload: IngestionPayload, pack?: PatternPack): Promise<{ doc: PageDoc; trace: Trace }> {
+    async process(payload: IngestionPayload, pack?: PatternPack, options?: { forceReadability?: boolean }): Promise<{ doc: PageDoc; trace: Trace }> {
         const startTime = Date.now();
         this.pack = pack;
+
         const html = payload.rawContent.toString('utf-8');
-        const root = parse(html);
+
+        // Use linkedom for primary structural analysis (fast)
+        const { document: linkedDoc } = linkedom.parseHTML(html);
+
+        // Convert to node-html-parser for existing recursive logic (if needed) 
+        // or just use linkedDoc directly. Let's try to adapt linkedDoc.
+        // Actually, linkedom is more standard-compliant.
 
         if (pack) {
             this.addStep('Pattern Match', pack.domain, 'Using domain-specific pattern pack');
         }
 
-        this.addStep('Parsing', 'Success', `Parsed ${html.length} characters of HTML`);
+        this.addStep('Parsing', 'Success (linkedom)', `Parsed ${html.length} characters of HTML`);
 
-        const title = this.extractTitle(root);
-        const content = this.extractContent(root);
+        // Structured metadata first
+        const jsonLd = this.extractJsonLd(linkedDoc);
+        if (jsonLd.headline) {
+            this.addStep('Metadata Extraction', jsonLd.headline, 'Extracted via JSON-LD');
+        }
+
+        let title = jsonLd.headline || this.extractTitleLinked(linkedDoc);
+        let content: ContentBlock[] = [];
+
+        if (options?.forceReadability) {
+            this.addStep('Extraction', 'Readability', 'Forced Readability mode via options');
+            const readResult = this.extractViaReadability(html);
+            title = readResult.title || title;
+            content = readResult.content;
+        } else {
+            // Here we still use the HTMLElement from node-html-parser because the codebase is built around it
+            const root = parse(html);
+            content = this.extractContent(root);
+
+            // Fallback to Readability if content signal is low (heuristic: < 3 blocks)
+            if (content.length < 3) {
+                this.addStep('Heuristic Fallback', 'Readability', 'Low content signal; attempting Readability extraction');
+                const readResult = this.extractViaReadability(html);
+                if (readResult.content.length > content.length) {
+                    title = readResult.title || title;
+                    content = readResult.content;
+                    this.addStep('Readability Result', 'Success', `Extracted ${content.length} blocks via Readability`);
+                }
+            }
+        }
 
         this.trace.durationMs = Date.now() - startTime;
+
+        // Dedup links and assign refIds
+        const links: LinkRef[] = [];
+        const linkMap = new Map<string, number>();
+        let nextRefId = 1;
+
+        const processLinks = (blocks: ContentBlock[]) => {
+            for (const block of blocks) {
+                if (block.type === 'link') {
+                    if (!linkMap.has(block.url)) {
+                        const refId = nextRefId++;
+                        linkMap.set(block.url, refId);
+                        links.push({ id: refId, text: block.text, url: block.url });
+                        block.refId = refId;
+                    } else {
+                        block.refId = linkMap.get(block.url);
+                    }
+                }
+                if (block.type === 'thread-item' && block.children) {
+                    processLinks(block.children);
+                }
+            }
+        };
+        processLinks(content);
+
+        // Heuristic for kind
+        let kind: 'thread' | 'article' | 'mixed' = 'article';
+        const hasThread = content.some(b => b.type === 'thread-item');
+        const hasMuchText = content.filter(b => b.type === 'text').length > 5;
+        if (hasThread && hasMuchText) kind = 'mixed';
+        else if (hasThread) kind = 'thread';
 
         const doc: PageDoc = {
             title,
             url: payload.source === 'url' ? payload.identifier : undefined,
+            meta: {
+                author: jsonLd.author,
+                site: jsonLd.site || (payload.source === 'url' ? this.safeHostname(payload.identifier) : undefined),
+                published: jsonLd.date,
+                pack: pack?.domain,
+                jsonLd: !!jsonLd.headline
+            },
+            kind,
             content,
+            links,
             metadata: {
                 source: payload.source,
                 mimeType: payload.mimeType,
-                pack: pack?.domain
+                ...this.trace.signals
             }
         };
 
         return { doc, trace: this.trace };
+    }
+
+    private safeHostname(url: string): string | undefined {
+        try {
+            return new URL(url).hostname;
+        } catch {
+            return undefined;
+        }
+    }
+
+    private extractJsonLd(doc: any): { headline?: string; author?: string; date?: string; site?: string } {
+        const scripts = doc.querySelectorAll('script[type="application/ld+json"]');
+        for (const script of Array.from(scripts)) {
+            try {
+                const data = JSON.parse((script as any).textContent || '');
+                // Handle both single object and array of objects
+                const items = Array.isArray(data) ? data : [data];
+                for (const item of items) {
+                    if (item['@type'] === 'Article' || item['@type'] === 'BlogPosting' || item['@type'] === 'NewsArticle') {
+                        return {
+                            headline: item.headline || item.name,
+                            author: typeof item.author === 'string' ? item.author : item.author?.name,
+                            date: item.datePublished,
+                            site: item.publisher?.name
+                        };
+                    }
+                }
+            } catch (e) {
+                // Ignore malformed JSON-LD
+            }
+        }
+        return {};
+    }
+
+    private extractTitleLinked(doc: any): string {
+        const ogTitle = doc.querySelector('meta[property="og:title"]')?.getAttribute('content');
+        if (ogTitle) return ogTitle;
+        const h1 = doc.querySelector('h1')?.textContent?.trim();
+        if (h1) return h1;
+        return doc.querySelector('title')?.textContent?.trim() || 'Untitled';
+    }
+
+    private extractViaReadability(html: string): { title: string; content: ContentBlock[] } {
+        try {
+            const dom = new JSDOM(html);
+            const reader = new Readability(dom.window.document);
+            const article = reader.parse();
+
+            if (!article) return { title: '', content: [] };
+
+            const blocks: ContentBlock[] = [];
+            const articleRoot = parse(article.content || '');
+            this.traverse(articleRoot, blocks);
+
+            return {
+                title: article.title || '',
+                content: blocks
+            };
+        } catch (e) {
+            this.addStep('Readability Error', 'Failed', String(e));
+            return { title: '', content: [] };
+        }
     }
 
     private extractTitle(root: HTMLElement): string {
@@ -78,6 +218,7 @@ export class ExtractionPipeline {
             contentRoot = root.querySelector(this.pack.selectors.root);
             if (contentRoot) {
                 this.addStep('Content Root', contentRoot.tagName, `Selected via pack selector: ${this.pack.selectors.root}`);
+                this.trace.signals.rootSelector = this.pack.selectors.root;
             }
         }
 
@@ -85,31 +226,51 @@ export class ExtractionPipeline {
             contentRoot = root.querySelector('main') || root.querySelector('article') || root.querySelector('body');
             if (contentRoot) {
                 this.addStep('Content Root', contentRoot.tagName, 'Selected via heuristics');
+                this.trace.signals.rootSelector = contentRoot.tagName.toLowerCase();
             }
         }
 
         if (contentRoot) {
             this.traverse(contentRoot, blocks);
+            this.trace.signals.itemSelector = this.pack?.selectors.item || 'none';
+            this.trace.signals.blockCount = blocks.length;
         }
 
         return blocks;
     }
 
     private matchesSelector(element: HTMLElement, selector: string): boolean {
-        // Simple matcher for tag names, classes, and attributes
         const parts = selector.split(',').map(s => s.trim());
         for (const part of parts) {
-            if (part.startsWith('.')) {
-                if (element.classList.contains(part.substring(1))) return true;
-            } else if (part.startsWith('[') && part.endsWith(']')) {
+            // Handle tag.class notation
+            const [tagName, ...classes] = part.split('.');
+
+            let match = true;
+            if (tagName && tagName !== element.tagName.toLowerCase()) {
+                match = false;
+            }
+
+            if (match && classes.length > 0) {
+                const elementClasses = (element.getAttribute('class') || '').split(/\s+/);
+                for (const cls of classes) {
+                    if (!elementClasses.includes(cls)) {
+                        match = false;
+                        break;
+                    }
+                }
+            }
+
+            // Handle attribute selector [attr=val]
+            if (!tagName && part.startsWith('[') && part.endsWith(']')) {
                 const attrMatch = part.match(/\[([a-zA-Z0-9_-]+)=['"]?([^'"]+)['"]?\]/);
                 if (attrMatch) {
                     const [_, name, value] = attrMatch;
-                    if (element.getAttribute(name!) === value) return true;
+                    if (element.getAttribute(name!) !== value) match = false;
+                    else match = true;
                 }
-            } else if (part === element.tagName.toLowerCase()) {
-                return true;
             }
+
+            if (match) return true;
         }
         return false;
     }
@@ -119,25 +280,34 @@ export class ExtractionPipeline {
 
         for (const child of node.childNodes) {
             if (child instanceof HTMLElement) {
+                const tag = child.tagName.toLowerCase();
+
                 // Check for blacklisted elements
-                if (this.pack?.filters?.some(f => child.classList.contains(f.substring(1)) || child.tagName.toLowerCase() === f.toLowerCase())) {
+                if (this.pack?.filters?.some(f => this.matchesSelector(child, f))) {
                     continue;
                 }
 
                 if (itemSelector && this.matchesSelector(child, itemSelector)) {
                     this.extractComment(child, blocks);
-                } else if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(child.tagName.toLowerCase())) {
+                } else if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag)) {
                     blocks.push({
                         type: 'heading',
-                        level: parseInt(child.tagName.substring(1)),
+                        level: parseInt(tag.substring(1)),
                         text: child.text.trim()
                     });
-                } else if (child.tagName.toLowerCase() === 'p') {
+                } else if (tag === 'p') {
                     const text = child.text.trim();
                     if (text) {
                         blocks.push({ type: 'text', text });
                     }
-                } else if (child.tagName.toLowerCase() === 'a') {
+                } else if (tag === 'blockquote') {
+                    blocks.push({ type: 'quote', text: child.text.trim() });
+                } else if (tag === 'pre' || tag === 'code') {
+                    blocks.push({ type: 'code', text: child.text.trim() });
+                } else if (tag === 'ul' || tag === 'ol') {
+                    const items = child.querySelectorAll('li').map(li => li.text.trim()).filter(t => t);
+                    if (items.length > 0) blocks.push({ type: 'list', items });
+                } else if (tag === 'a') {
                     blocks.push({
                         type: 'link',
                         text: child.text.trim(),
@@ -166,7 +336,7 @@ export class ExtractionPipeline {
             author = child.getAttribute('author') || child.querySelector('[author]')?.text.trim();
         }
 
-        // Body extraction
+        // Body extraction -> blocks
         let bodyNode: HTMLElement | null = null;
         if (selectors?.body) {
             bodyNode = child.querySelector(selectors.body);
@@ -175,20 +345,49 @@ export class ExtractionPipeline {
             bodyNode = child.querySelector('[slot="comment"]') || child.querySelector('.md') || child;
         }
 
+        const commentContent: ContentBlock[] = [];
+        if (bodyNode) {
+            this.traverse(bodyNode, commentContent);
+        }
+
         // Depth extraction
         let depth = 0;
-        if (selectors?.depth?.startsWith('attr:')) {
-            depth = parseInt(child.getAttribute(selectors.depth.split(':')[1]!) || '0');
+        if (selectors?.depthMethod === 'attr' && selectors.depth) {
+            const attrParts = selectors.depth.split(':');
+            depth = parseInt(child.getAttribute(attrParts[1] || attrParts[0]!) || '0');
+        } else if (selectors?.depthMethod === 'query' && selectors.depth) {
+            const depthEl = child.querySelector(selectors.depth);
+            if (depthEl) {
+                if (selectors.depthMath) {
+                    const rawValue = parseInt(depthEl.getAttribute('width') || depthEl.text || '0');
+                    if (selectors.depthMath === 'x / 40') depth = Math.floor(rawValue / 40);
+                    else depth = rawValue;
+                } else {
+                    depth = parseInt(depthEl.text || '0');
+                }
+            }
+        } else if (selectors?.depthMethod === 'nested') {
+            // Count parents matching itemSelector
+            let parent = child.parentNode;
+            while (parent && parent instanceof HTMLElement) {
+                if (this.pack?.selectors.item && this.matchesSelector(parent, this.pack.selectors.item)) {
+                    depth++;
+                }
+                parent = parent.parentNode;
+            }
         } else {
+            // Default heuristics
             depth = parseInt(child.getAttribute('depth') || child.getAttribute('aria-level') || '0');
         }
 
+        const children: ContentBlock[] = [];
         const item: ContentBlock = {
             type: 'thread-item',
             level: depth,
             author: author,
-            body: bodyNode.text.trim(),
-            children: []
+            content: commentContent,
+            children,
+            collapsed: false
         };
         blocks.push(item);
 
@@ -197,9 +396,9 @@ export class ExtractionPipeline {
         for (const nestedChild of child.childNodes) {
             if (nestedChild instanceof HTMLElement) {
                 if (itemSelector && this.matchesSelector(nestedChild, itemSelector)) {
-                    this.extractComment(nestedChild, item.children!);
+                    this.extractComment(nestedChild, children);
                 } else {
-                    this.extractCommentSearch(nestedChild, item.children!);
+                    this.extractCommentSearch(nestedChild, children);
                 }
             }
         }

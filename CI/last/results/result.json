@@ -1,0 +1,10 @@
+{
+  "blockers": [
+    "test"
+  ],
+  "exit_code": 1,
+  "features": [
+    "test"
+  ],
+  "status": "fail"
+}

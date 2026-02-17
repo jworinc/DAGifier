@@ -9,25 +9,54 @@
   "scripts": {
     "build": "tsc",
     "start": "ts-node src/cli.ts",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
     "test:record": "ts-node src/cli.ts record",
     "test:verify": "ts-node src/cli.ts"
   },
-  "keywords": [],
+  "files": [
+    "dist",
+    "patterns",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "cli",
+    "scraping",
+    "readability",
+    "json-ld",
+    "markdown"
+  ],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/preset-env": "^7.29.0",
+    "@babel/preset-typescript": "^7.28.5",
     "@types/chalk": "^0.4.31",
+    "@types/diff": "^7.0.2",
+    "@types/jest": "^30.0.0",
+    "@types/jsdom": "^27.0.0",
+    "@types/mozilla-readability": "^0.2.1",
     "@types/node": "^25.2.3",
+    "@types/wrap-ansi": "^3.0.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
+    "@mozilla/readability": "^0.6.0",
     "axios": "^1.13.5",
     "chalk": "^5.6.2",
     "commander": "^14.0.3",
+    "diff": "^8.0.3",
     "file-type": "^21.3.0",
+    "jsdom": "^28.1.0",
+    "linkedom": "^0.18.12",
     "node-html-parser": "^7.0.2",
+    "playwright": "^1.58.2",
+    "strip-ansi": "^6.0.1",
+    "wrap-ansi": "^6.2.0",
     "yaml": "^2.8.2"
   }
 }

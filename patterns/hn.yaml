@@ -1,0 +1,12 @@
+domain: news.ycombinator.com
+selectors:
+  root: "table.comment-tree"
+  item: "tr.comtr"
+  author: ".hnuser"
+  body: ".commtext"
+  depth: "img[src*='s.gif']"
+  depthMethod: "query"
+  depthMath: "x / 40"
+filters:
+  - ".reply"
+  - ".votestick"
