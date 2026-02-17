@@ -1,0 +1,10 @@
+domain: reddit.com
+selectors:
+  root: "main"
+  item: "shreddit-comment, [data-type='comment']"
+  author: "attr:author"
+  author_fallback: "[author]"
+  body: "[slot='comment'], .md"
+  depth: "attr:depth"
+filters:
+  - ".promoted-link"

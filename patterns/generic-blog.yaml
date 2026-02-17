@@ -1,0 +1,9 @@
+domain: generic-blog.com
+selectors:
+  root: ".content-area"
+  item: ".comment-item"
+  author: ".author-name"
+  body: ".comment-body"
+filters:
+  - ".ad-space"
+  - "script"
