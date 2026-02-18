@@ -7,11 +7,15 @@
     "python": "3.14.2"
   },
   "features": [
-    "test"
+    "deps",
+    "check",
+    "build",
+    "test",
+    "run"
   ],
   "repo": "Dagifier",
   "required_for_good": [
     "check"
   ],
-  "timestamp_utc": "2026-02-17T19:57:20.671882+00:00"
+  "timestamp_utc": "2026-02-18T03:39:44.116746+00:00"
 }

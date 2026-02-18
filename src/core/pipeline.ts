@@ -4,6 +4,10 @@ import { Readability } from '@mozilla/readability';
 import * as linkedom from 'linkedom';
 import { PageDoc, ContentBlock, Trace, TraceStep, IngestionPayload, LinkRef } from '../types';
 import { PatternPack } from './patterns';
+import { RedditJsonExtractor } from './extractors/reddit_json';
+import { HnJsonExtractor } from './extractors/hn_json';
+import { WikipediaJsonExtractor } from './extractors/wikipedia_json';
+import { StackOverflowJsonExtractor } from './extractors/stackoverflow_json';
 
 export class ExtractionPipeline {
     private trace: Trace;
@@ -17,20 +21,51 @@ export class ExtractionPipeline {
         };
     }
 
-    private addStep(name: string, decision: string, reason: string) {
+    private addStep(name: string, decision: string, reason: string, data?: any) {
         this.trace.steps.push({
             name,
             decision,
             reason,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            data
         });
     }
 
-    async process(payload: IngestionPayload, pack?: PatternPack, options?: { forceReadability?: boolean }): Promise<{ doc: PageDoc; trace: Trace }> {
+    async process(payload: IngestionPayload, pack?: PatternPack, options?: { forceReadability?: boolean; maxDepth?: number; maxLength?: number }): Promise<{ doc: PageDoc; trace: Trace }> {
         const startTime = Date.now();
         this.pack = pack;
 
         const html = payload.rawContent.toString('utf-8');
+
+        // Handle JSON payloads (e.g., from transformed API endpoints)
+        if (payload.mimeType?.includes('application/json') || html.trim().startsWith('{') || html.trim().startsWith('[')) {
+            try {
+                const json = JSON.parse(html);
+                if (payload.identifier.includes('reddit.com')) {
+                    this.addStep('Extraction', 'Reddit JSON API', 'Extracted structured data from Reddit JSON endpoint');
+                    const { doc } = await this.renderFromJson(json, payload.identifier, RedditJsonExtractor);
+                    doc.metadata.durationMs = Date.now() - startTime;
+                    return { doc, trace: this.trace };
+                } else if (payload.identifier.includes('hn.algolia.com') || payload.identifier.includes('news.ycombinator.com')) {
+                    this.addStep('Extraction', 'HN JSON API', 'Extracted structured data from HN Algolia endpoint');
+                    const { doc } = await this.renderFromJson(json, payload.identifier, HnJsonExtractor);
+                    doc.metadata.durationMs = Date.now() - startTime;
+                    return { doc, trace: this.trace };
+                } else if (payload.identifier.includes('wikipedia.org')) {
+                    this.addStep('Extraction', 'Wikipedia JSON API', 'Extracted structured data from Wikipedia REST endpoint');
+                    const { doc } = await this.renderFromJson(json, payload.identifier, WikipediaJsonExtractor);
+                    doc.metadata.durationMs = Date.now() - startTime;
+                    return { doc, trace: this.trace };
+                } else if (payload.identifier.includes('stackexchange.com') || payload.identifier.includes('stackoverflow.com')) {
+                    this.addStep('Extraction', 'StackOverflow JSON API', 'Extracted structured data from Stack Exchange API');
+                    const { doc } = await this.renderFromJson(json, payload.identifier, StackOverflowJsonExtractor);
+                    doc.metadata.durationMs = Date.now() - startTime;
+                    return { doc, trace: this.trace };
+                }
+            } catch (e) {
+                this.addStep('Parsing', 'JSON Failure', 'Attempted JSON parsing but failed: ' + String(e));
+            }
+        }
 
         // Use linkedom for primary structural analysis (fast)
         const { document: linkedDoc } = linkedom.parseHTML(html);
@@ -45,13 +80,13 @@ export class ExtractionPipeline {
 
         this.addStep('Parsing', 'Success (linkedom)', `Parsed ${html.length} characters of HTML`);
 
-        // Structured metadata first
-        const jsonLd = this.extractJsonLd(linkedDoc);
-        if (jsonLd.headline) {
-            this.addStep('Metadata Extraction', jsonLd.headline, 'Extracted via JSON-LD');
+        // Multi-source metadata hunting
+        const meta = this.huntMetadata(linkedDoc);
+        if (meta.headline) {
+            this.addStep('Metadata Extraction', meta.headline, 'Extracted via Meta Hunter (JSON-LD/OG/Twitter)');
         }
 
-        let title = jsonLd.headline || this.extractTitleLinked(linkedDoc);
+        let title = meta.headline || this.extractTitleLinked(linkedDoc);
         let content: ContentBlock[] = [];
 
         if (options?.forceReadability) {
@@ -76,15 +111,80 @@ export class ExtractionPipeline {
             }
         }
 
+        // Heuristic for kind
+        let kind: 'thread' | 'article' | 'mixed' = 'article';
+        const hasThread = content.some(b => b.type === 'thread-item');
+        const hasMuchText = content.filter(b => b.type === 'text').length > 5;
+        if (hasThread && hasMuchText) kind = 'mixed';
+        else if (hasThread) kind = 'thread';
+
+        const warnings: string[] = [];
+        let confidence = 1.0;
+
+        if (!pack && !payload.identifier.includes('reddit.com') && !payload.identifier.includes('news.ycombinator.com')) {
+            confidence = 0.7; // Heuristic fallback
+            if (content.length < 5) {
+                confidence = 0.4;
+                warnings.push('Structure unreliable: Low content signal and no pattern match.');
+            }
+        }
+
         this.trace.durationMs = Date.now() - startTime;
 
-        // Dedup links and assign refIds
+        return {
+            doc: this.finalizeDoc({
+                title,
+                url: payload.source === 'url' ? payload.identifier : undefined,
+                author: meta.author,
+                site: meta.site || (payload.source === 'url' ? this.safeHostname(payload.identifier) : undefined),
+                date: meta.date,
+                pack: pack?.domain,
+                jsonLd: meta.source === 'json-ld',
+                confidence,
+                warnings,
+                kind,
+                content,
+                source: payload.source,
+                mimeType: payload.mimeType,
+                maxDepth: options?.maxDepth,
+                maxLength: options?.maxLength
+            }),
+            trace: this.trace
+        };
+    }
+
+    private finalizeDoc(ctx: {
+        title: string,
+        url?: string,
+        author?: string,
+        site?: string,
+        date?: string,
+        pack?: string,
+        jsonLd: boolean,
+        confidence: number,
+        warnings: string[],
+        kind: 'thread' | 'article' | 'mixed',
+        content: ContentBlock[],
+        source: string,
+        mimeType?: string,
+        maxDepth?: number,
+        maxLength?: number
+    }): PageDoc {
+        // 1. Post-process blocks: assign IDs, normalize text, set parentIds
+        this.polishBlocks(ctx.content);
+
+        // 2. Resource Limits Applier (Manifesto)
+        if (ctx.maxDepth || ctx.maxLength) {
+            this.applyResourceLimits(ctx.content, ctx.maxDepth, ctx.maxLength);
+        }
+
+        // 2. Dedup links and assign refIds
         const links: LinkRef[] = [];
         const linkMap = new Map<string, number>();
         let nextRefId = 1;
 
         const processLinks = (blocks: ContentBlock[]) => {
-            for (const block of blocks) {
+            blocks.forEach(block => {
                 if (block.type === 'link') {
                     if (!linkMap.has(block.url)) {
                         const refId = nextRefId++;
@@ -95,41 +195,93 @@ export class ExtractionPipeline {
                         block.refId = linkMap.get(block.url);
                     }
                 }
-                if (block.type === 'thread-item' && block.children) {
-                    processLinks(block.children);
+                if (block.type === 'thread-item') {
+                    if (block.content) processLinks(block.content);
+                    if (block.children) processLinks(block.children);
                 }
-            }
+            });
         };
-        processLinks(content);
+        processLinks(ctx.content);
 
-        // Heuristic for kind
-        let kind: 'thread' | 'article' | 'mixed' = 'article';
-        const hasThread = content.some(b => b.type === 'thread-item');
-        const hasMuchText = content.filter(b => b.type === 'text').length > 5;
-        if (hasThread && hasMuchText) kind = 'mixed';
-        else if (hasThread) kind = 'thread';
+        const signature = this.computeStructuralSignature(ctx.content);
 
-        const doc: PageDoc = {
-            title,
-            url: payload.source === 'url' ? payload.identifier : undefined,
+        return {
+            version: '1.1',
+            title: this.normalizeText(ctx.title),
+            url: ctx.url,
             meta: {
-                author: jsonLd.author,
-                site: jsonLd.site || (payload.source === 'url' ? this.safeHostname(payload.identifier) : undefined),
-                published: jsonLd.date,
-                pack: pack?.domain,
-                jsonLd: !!jsonLd.headline
+                author: ctx.author,
+                site: ctx.site,
+                published: ctx.date,
+                pack: ctx.pack,
+                jsonLd: ctx.jsonLd,
+                confidence: ctx.confidence,
+                warnings: ctx.warnings
             },
-            kind,
-            content,
+            kind: ctx.kind,
+            content: ctx.content,
             links,
             metadata: {
-                source: payload.source,
-                mimeType: payload.mimeType,
+                source: ctx.source,
+                mimeType: ctx.mimeType,
                 ...this.trace.signals
-            }
+            },
+            structural_signature: signature
         };
+    }
 
-        return { doc, trace: this.trace };
+    private normalizeText(text: string): string {
+        return text.normalize('NFC').replace(/\s+/g, ' ').trim();
+    }
+
+    private polishBlocks(blocks: ContentBlock[], parentId?: string, depthPrefix: string = '0') {
+        blocks.forEach((block, index) => {
+            const currentPath = `${depthPrefix}.${index}`;
+            // @ts-ignore - assigning ID to union type
+            block.id = this.computeContentHash(block, currentPath);
+
+            if (block.type === 'text' || block.type === 'heading' || block.type === 'quote' || block.type === 'code') {
+                block.text = this.normalizeText(block.text);
+            }
+
+            if (block.type === 'thread-item') {
+                block.parentId = parentId;
+                if (block.content) this.polishBlocks(block.content, block.id, `${currentPath}.c`);
+                if (block.children) this.polishBlocks(block.children, block.id, `${currentPath}.n`);
+            }
+
+            if (block.type === 'list') {
+                block.items = block.items.map(i => this.normalizeText(i));
+            }
+        });
+    }
+
+    private computeContentHash(block: ContentBlock, path: string): string {
+        let str = block.type + path;
+        if ('text' in block) str += block.text;
+
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash;
+        }
+        return Math.abs(hash).toString(16);
+    }
+
+    private computeStructuralSignature(blocks: ContentBlock[]): string {
+        const structureString = blocks.map(b => {
+            if (b.type === 'heading') return `H${b.level}`;
+            if (b.type === 'thread-item') return `T${b.depth}[${b.children?.length || 0}]`;
+            return b.type.toUpperCase().charAt(0);
+        }).join('|');
+        let hash = 0;
+        for (let i = 0; i < structureString.length; i++) {
+            const char = structureString.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash;
+        }
+        return hash.toString(16);
     }
 
     private safeHostname(url: string): string | undefined {
@@ -138,6 +290,41 @@ export class ExtractionPipeline {
         } catch {
             return undefined;
         }
+    }
+
+    private huntMetadata(doc: any): { headline?: string; author?: string; date?: string; site?: string; source?: string } {
+        // 1. JSON-LD (Highest Priority)
+        const jsonLd = this.extractJsonLd(doc);
+        if (jsonLd.headline) return { ...jsonLd, source: 'json-ld' };
+
+        // 2. OpenGraph
+        const og = {
+            headline: doc.querySelector('meta[property="og:title"]')?.getAttribute('content'),
+            author: doc.querySelector('meta[property="article:author"]')?.getAttribute('content'),
+            date: doc.querySelector('meta[property="article:published_time"]')?.getAttribute('content'),
+            site: doc.querySelector('meta[property="og:site_name"]')?.getAttribute('content')
+        };
+        if (og.headline) return { ...og, source: 'opengraph' };
+
+        // 3. Twitter
+        const twitter = {
+            headline: doc.querySelector('meta[name="twitter:title"]')?.getAttribute('content'),
+            author: doc.querySelector('meta[name="twitter:creator"]')?.getAttribute('content'),
+            site: doc.querySelector('meta[name="twitter:site"]')?.getAttribute('content')
+        };
+        if (twitter.headline) return { ...twitter, source: 'twitter' };
+
+        // 4. Heuristics
+        return {
+            headline: doc.querySelector('title')?.textContent?.trim(),
+            author: doc.querySelector('[rel="author"]')?.textContent?.trim() ||
+                doc.querySelector('.author')?.textContent?.trim() ||
+                doc.querySelector('.user')?.textContent?.trim() ||
+                doc.querySelector('[author]')?.getAttribute('author') ||
+                doc.querySelector('[author]')?.textContent?.trim(),
+            date: doc.querySelector('time[datetime]')?.getAttribute('datetime'),
+            source: 'heuristics'
+        };
     }
 
     private extractJsonLd(doc: any): { headline?: string; author?: string; date?: string; site?: string } {
@@ -174,8 +361,8 @@ export class ExtractionPipeline {
 
     private extractViaReadability(html: string): { title: string; content: ContentBlock[] } {
         try {
-            const dom = new JSDOM(html);
-            const reader = new Readability(dom.window.document);
+            const { document } = linkedom.parseHTML(html);
+            const reader = new Readability(document as any);
             const article = reader.parse();
 
             if (!article) return { title: '', content: [] };
@@ -217,26 +404,152 @@ export class ExtractionPipeline {
         if (this.pack?.selectors.root) {
             contentRoot = root.querySelector(this.pack.selectors.root);
             if (contentRoot) {
-                this.addStep('Content Root', contentRoot.tagName, `Selected via pack selector: ${this.pack.selectors.root}`);
+                this.addStep('Content Root', contentRoot.tagName, `Selected via pack selector: ${this.pack.selectors.root}`, { selector: this.pack.selectors.root });
                 this.trace.signals.rootSelector = this.pack.selectors.root;
             }
         }
 
         if (!contentRoot) {
-            contentRoot = root.querySelector('main') || root.querySelector('article') || root.querySelector('body');
+            contentRoot = root.querySelector('main') || root.querySelector('article') || root.querySelector('body') || root;
             if (contentRoot) {
-                this.addStep('Content Root', contentRoot.tagName, 'Selected via heuristics');
-                this.trace.signals.rootSelector = contentRoot.tagName.toLowerCase();
+                this.addStep('Content Root', contentRoot.tagName || 'root', 'Selected via heuristics');
+                this.trace.signals.rootSelector = (contentRoot.tagName || 'root').toLowerCase();
             }
         }
 
         if (contentRoot) {
             this.traverse(contentRoot, blocks);
             this.trace.signals.itemSelector = this.pack?.selectors.item || 'none';
+
+            // Rebuild tree if we have a flat list of thread-items with depth (e.g. HN)
+            if (blocks.some(b => b.type === 'thread-item' && b.depth > 0) && blocks.every(b => b.type === 'thread-item' && b.children?.length === 0)) {
+                this.addStep('Tree Reconstruction', 'Pattern-driven', 'Rebuilding hierarchy from flat HTML list via depth metadata');
+                const tree = this.rebuildThreadTree(blocks);
+                blocks.length = 0;
+                blocks.push(...tree);
+            }
+
             this.trace.signals.blockCount = blocks.length;
         }
 
+        // Phase 3: Generic Thread Reconstruction
+        // If content is very thin, try to detect thread structures
+        if (blocks.length < 3 && !this.pack?.selectors.item) {
+            const genericThread = this.detectGenericThread(root);
+            if (genericThread.length > 0) {
+                this.addStep('Generic Thread', 'Detected', `Found ${genericThread.length} items via generic heuristics`);
+                // Clear thin/accidental blocks before pushing structured thread
+                blocks.length = 0;
+                blocks.push(...genericThread);
+                this.trace.signals.strategy = 'generic-thread';
+            }
+        }
+
+        if (blocks.length === 0) {
+            console.log('DEBUG: No content found. Root innerHTML:', root.innerHTML);
+            console.log('DEBUG: Content Root:', contentRoot ? contentRoot.outerHTML : 'None');
+        }
         return blocks;
+    }
+
+    private detectGenericThread(root: HTMLElement): ContentBlock[] {
+        // Heuristic 1: Look for highly repeated class names with nesting
+        const candidates = root.querySelectorAll('div, section, li, article');
+        const classCounts = new Map<string, number>();
+
+        for (const el of candidates) {
+            const cls = el.getAttribute('class');
+            if (cls) classCounts.set(cls, (classCounts.get(cls) || 0) + 1);
+        }
+
+        // Find blocks that appear many times (> 5) and contain text
+        let bestSelector = '';
+        let maxCount = 0;
+
+        for (const [cls, count] of classCounts.entries()) {
+            if (count >= 3 && count > maxCount) {
+                // Check if it looks like a comment (has author/time/reply indicators?)
+                // Simplified check for now
+                bestSelector = '.' + cls.split(' ').join('.');
+                maxCount = count;
+            }
+        }
+
+        if (bestSelector) {
+            this.addStep('Generic Thread', 'Heuristic', `Identified repeated container: ${bestSelector}`);
+            const items = root.querySelectorAll(bestSelector);
+            const flatBlocks: ContentBlock[] = [];
+
+            for (const item of items) {
+                // Determine depth
+                let depth = parseInt(item.getAttribute('depth') || item.getAttribute('aria-level') || '0');
+                if (depth === 0) {
+                    let parent = item.parentNode;
+                    while (parent && parent instanceof HTMLElement) {
+                        if (this.matchesSelector(parent, bestSelector)) depth++;
+                        parent = parent.parentNode;
+                    }
+                }
+
+                // Extract body content via traverse for richness
+                const commentContent: ContentBlock[] = [];
+                // Only traverse CHILDREN of item, avoid recursing into item itself to prevent doubling
+                for (const childNode of item.childNodes) {
+                    if (childNode instanceof HTMLElement) {
+                        this.traverse(childNode, commentContent);
+                    }
+                }
+
+                if (commentContent.length > 0) {
+                    flatBlocks.push({
+                        id: '',
+                        type: 'thread-item',
+                        depth: depth,
+                        author: this.huntMetadata(item).author || 'Anonymous',
+                        content: commentContent,
+                        children: [],
+                        collapsed: false
+                    });
+                } else if (item.text.trim()) {
+                    flatBlocks.push({
+                        id: '',
+                        type: 'thread-item',
+                        depth: depth,
+                        author: this.huntMetadata(item).author || 'Anonymous',
+                        content: [{ id: '', type: 'text', text: item.text.trim() }],
+                        children: [],
+                        collapsed: false
+                    });
+                }
+            }
+
+            // Rebuild tree from flat list based on depth
+            return this.rebuildThreadTree(flatBlocks);
+        }
+        return [];
+    }
+
+    private rebuildThreadTree(flat: ContentBlock[]): ContentBlock[] {
+        const root: ContentBlock[] = [];
+        const stack: { block: any, depth: number }[] = [];
+
+        for (const block of flat) {
+            if (block.type !== 'thread-item') continue;
+
+            while (stack.length > 0 && stack[stack.length - 1]!.depth >= block.depth) {
+                stack.pop();
+            }
+
+            if (stack.length === 0) {
+                root.push(block);
+            } else {
+                stack[stack.length - 1]!.block.children.push(block);
+                block.parentId = stack[stack.length - 1]!.block.id;
+            }
+            stack.push({ block, depth: block.depth });
+        }
+
+        return root;
     }
 
     private matchesSelector(element: HTMLElement, selector: string): boolean {
@@ -291,6 +604,7 @@ export class ExtractionPipeline {
                     this.extractComment(child, blocks);
                 } else if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag)) {
                     blocks.push({
+                        id: '',
                         type: 'heading',
                         level: parseInt(tag.substring(1)),
                         text: child.text.trim()
@@ -298,17 +612,18 @@ export class ExtractionPipeline {
                 } else if (tag === 'p') {
                     const text = child.text.trim();
                     if (text) {
-                        blocks.push({ type: 'text', text });
+                        blocks.push({ id: '', type: 'text', text });
                     }
                 } else if (tag === 'blockquote') {
-                    blocks.push({ type: 'quote', text: child.text.trim() });
+                    blocks.push({ id: '', type: 'quote', text: child.text.trim() });
                 } else if (tag === 'pre' || tag === 'code') {
-                    blocks.push({ type: 'code', text: child.text.trim() });
+                    blocks.push({ id: '', type: 'code', text: child.text.trim() });
                 } else if (tag === 'ul' || tag === 'ol') {
                     const items = child.querySelectorAll('li').map(li => li.text.trim()).filter(t => t);
-                    if (items.length > 0) blocks.push({ type: 'list', items });
+                    if (items.length > 0) blocks.push({ id: '', type: 'list', items });
                 } else if (tag === 'a') {
                     blocks.push({
+                        id: '',
                         type: 'link',
                         text: child.text.trim(),
                         url: child.getAttribute('href') || ''
@@ -378,12 +693,14 @@ export class ExtractionPipeline {
         } else {
             // Default heuristics
             depth = parseInt(child.getAttribute('depth') || child.getAttribute('aria-level') || '0');
+            if (depth > 0) this.addStep('Depth Inference', 'Attribute', `Found depth ${depth} via attribute`, { method: 'attribute', value: depth });
         }
 
         const children: ContentBlock[] = [];
         const item: ContentBlock = {
+            id: '', // Will be set in post-processing
             type: 'thread-item',
-            level: depth,
+            depth: depth,
             author: author,
             content: commentContent,
             children,
@@ -413,6 +730,56 @@ export class ExtractionPipeline {
                 } else {
                     this.extractCommentSearch(child, blocks);
                 }
+            }
+        }
+    }
+
+    private async renderFromJson(json: any, url: string, extractor: any): Promise<{ doc: PageDoc }> {
+        const rawDoc = extractor.extract(json, url);
+
+        const doc = this.finalizeDoc({
+            title: rawDoc.title,
+            url: rawDoc.url,
+            author: rawDoc.meta.author,
+            site: rawDoc.meta.site,
+            date: rawDoc.meta.published,
+            pack: rawDoc.meta.pack,
+            jsonLd: !!rawDoc.meta.jsonLd,
+            confidence: rawDoc.meta.confidence || 1.0,
+            warnings: rawDoc.meta.warnings || [],
+            kind: rawDoc.kind,
+            content: rawDoc.content,
+            source: 'json-api',
+            mimeType: 'application/json'
+        });
+
+        return { doc };
+    }
+
+    private applyResourceLimits(blocks: ContentBlock[], maxDepth?: number, maxLength?: number) {
+        // Iterate backwards to allow safe removal
+        for (let i = blocks.length - 1; i >= 0; i--) {
+            const block = blocks[i];
+
+            // 1. Max Length Truncation (Apply to all text-bearing blocks)
+            if (maxLength && maxLength > 0) {
+                if ('text' in block && block.text.length > maxLength) {
+                    block.text = block.text.substring(0, maxLength) + '...';
+                }
+            }
+
+            // 2. Max Depth Pruning (Specific to thread-items)
+            if (block.type === 'thread-item') {
+                // Prune
+                if (maxDepth !== undefined && block.depth > maxDepth) {
+                    blocks.splice(i, 1);
+                    continue;
+                }
+
+                // Recurse
+                // Note: We recurse into children AND content of thread items
+                if (block.children) this.applyResourceLimits(block.children, maxDepth, maxLength);
+                if (block.content) this.applyResourceLimits(block.content, maxDepth, maxLength);
             }
         }
     }

@@ -1,4 +1,7 @@
 domain: reddit.com
+transform:
+  search: "^https?://((?:www\\.)?reddit\\.com/.+)$"
+  replace: "https://$1.json"
 selectors:
   root: "main"
   item: "shreddit-comment, [data-type='comment']"

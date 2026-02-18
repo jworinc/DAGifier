@@ -8,6 +8,10 @@ export interface CoordinatorOptions {
     rendered?: boolean; // Force rendered
     mode?: 'auto' | 'thread' | 'article';
     json?: boolean; // If true, don't force render on thin content automatically ?? actually CLI handles JSON output, we just need to know if we should be aggressive.
+    noFallback?: boolean;
+    maxDepth?: number;
+    maxLength?: number;
+    timeout?: number;
 }
 
 export interface CoordinatorResult {
@@ -35,7 +39,22 @@ export class Coordinator {
         }
 
         // 1. Initial Ingestion (Fetch or File)
-        let payload = await this.ingestor.ingest(input);
+        const pack = this.engine.getPackForUrl(input);
+        let targetInput = input;
+
+        if (pack?.transform && input.startsWith('http')) {
+            const regex = new RegExp(pack.transform.search);
+            if (regex.test(input)) {
+                targetInput = input.replace(regex, pack.transform.replace);
+                if (options.verbose) console.error(`[*] Transformed URL: ${input} -> ${targetInput}`);
+            }
+        }
+
+        let payload = await this.ingestor.ingest(targetInput);
+        return this.processPayload(payload, options, pack);
+    }
+
+    async processPayload(payload: IngestionPayload, options: CoordinatorOptions = {}, pack?: any): Promise<CoordinatorResult> {
         let usedBrowser = false;
         let provider: 'fetch' | 'playwright' = 'fetch';
 
@@ -53,24 +72,20 @@ export class Coordinator {
             }
         }
 
-        // 3. Pattern Matching
-        let pack;
-        if (payload.source === 'url') {
-            pack = this.engine.getPackForUrl(payload.identifier);
-        } else {
-            pack = this.engine.getPackForUrl(input);
-        }
+        // 3. Pattern Matching - already done above
 
         // 4. Extraction
         let { doc, trace } = await this.pipeline.process(payload, pack, {
-            forceReadability: options.mode === 'article'
+            forceReadability: options.mode === 'article',
+            maxDepth: options.mode === 'thread' ? options.maxDepth : undefined, // Only apply maxDepth for thread mode? Or global? Global seems safer.
+            maxLength: options.maxLength
         });
 
         // 5. Fallback Ladder (Thin Content)
         // If content is thin (< 3 blocks), it's likely JS-heavy or blocked.
         // Retry with Playwright if we haven't already.
         const isThin = doc.content.length < 3;
-        const canRetry = (payload.source === 'url' || payload.source === 'file') && !usedBrowser && options.mode !== 'article'; // Don't retry in strict article mode? actually auto mode usually allows it.
+        const canRetry = (payload.source === 'url' || payload.source === 'file') && !usedBrowser && options.mode !== 'article' && !options.noFallback; // Don't retry in strict article mode? actually auto mode usually allows it.
 
         if (isThin && canRetry) {
             if (options.verbose) console.error(`[*] Thin content detected (${doc.content.length} blocks). Escalating to Playwright...`);
@@ -81,7 +96,9 @@ export class Coordinator {
                 provider = 'playwright';
 
                 const retryResult = await this.pipeline.process(payload, pack, {
-                    forceReadability: options.mode === 'article'
+                    forceReadability: options.mode === 'article',
+                    maxDepth: options.mode === 'thread' ? options.maxDepth : undefined,
+                    maxLength: options.maxLength
                 });
                 doc = retryResult.doc;
                 trace = retryResult.trace;

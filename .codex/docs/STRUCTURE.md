@@ -9,9 +9,9 @@
 <!-- CODEX:STRUCTURE:BEGIN -->
 ### Structure Snapshot
 - repo: `Dagifier` [FS]
-- generated_utc: `2026-02-17T20:03:12.167551+00:00` [FS]
-- snapshot_id: `2026-02-17T20:03:12.167551+00:00` [FS]
-- sources: lifecycle_generated_utc=2026-02-17T20:03:08.564640+00:00 health_last_attempt=- [LCS+HST]
+- generated_utc: `2026-02-18T03:43:54.998146+00:00` [FS]
+- snapshot_id: `2026-02-18T03:43:54.998146+00:00` [FS]
+- sources: lifecycle_generated_utc=2026-02-18T03:43:50.991119+00:00 health_last_attempt=2026-02-18T03:39:44.116746+00:00 [LCS+HST]
 
 ### Control Surface
 - `.codex/run-step.sh <action> <domain>` [FS]
@@ -36,8 +36,8 @@
 ### Signals Used
 - lifecycle flags: source=True markers=True project_yaml=True run_step=True ci_workflow=False [LCS]
 - contract flags: interaction=False domain=False scope=False architecture=False core_tests=False [LCS]
-- artifact counts: planning=4 structured=0 mockups=0 tests=22 [LCS]
-- execution statuses: deps=- build=- test=- run=- check=- [HST]
+- artifact counts: planning=4 structured=0 mockups=0 tests=37 [LCS]
+- execution statuses: deps=skip build=- test=- run=- check=fail [HST]
 - repo-stack: languages=js/ts frameworks=playwright,vitest package_managers=npm [RSP]
 - repo-commands: run=start test=test,test:record,test:verify check=- [RSP]
 - repo-paths: src=True app=False lib=False tests=True spec=False docs=True ci=True dockerfile=True [RSP]

@@ -1,13 +1,23 @@
 {
   "steps": [
     {
-      "command": "npm test --if-present",
-      "duration_ms": 2871,
-      "ended_utc": "2026-02-17T19:57:20.671721+00:00",
-      "exit_code": 1,
-      "feature": "test",
-      "log": "/Users/anton/Code/Dagifier/CI/last/logs/test.log",
-      "started_utc": "2026-02-17T19:57:17.800191+00:00",
+      "command": "",
+      "duration_ms": 0,
+      "ended_utc": "2026-02-18T03:39:43.870200+00:00",
+      "exit_code": null,
+      "feature": "deps",
+      "log": "/Users/anton/Code/Dagifier/CI/last/logs/deps.log",
+      "started_utc": "2026-02-18T03:39:43.869423+00:00",
+      "status": "skip"
+    },
+    {
+      "command": "node -e \"const s=require('./package.json').scripts||{}; if(!(s.lint||s.typecheck||s.check)){process.exit(2)}\" && (npm run -s lint || npm run -s typecheck || npm run -s check)",
+      "duration_ms": 245,
+      "ended_utc": "2026-02-18T03:39:44.115922+00:00",
+      "exit_code": 2,
+      "feature": "check",
+      "log": "/Users/anton/Code/Dagifier/CI/last/logs/check.log",
+      "started_utc": "2026-02-18T03:39:43.870315+00:00",
       "status": "fail"
     }
   ]

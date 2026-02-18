@@ -5,57 +5,72 @@ description: Convert any URL into clean, llm-optimized markdown content using sm
 
 # Dagifier Skill
 
-The `dagifier` skill allows you to fetch, render, and distill web content into clean Markdown, optimized for LLM consumption. It handles dynamic content (via Playwright), extracts main article/thread content while removing clutter, and can even visualize data structures.
+The `dagifier` skill allows you to fetch, render, and distill web content into clean Markdown, optimized for LLM consumption. It handles dynamic content (via Playwright), extracts main article/thread content while removing clutter, and ensures constant-memory streaming for batch tasks.
 
 ## Capabilities
-- **Read**: Fetch a URL and return clean Markdown.
+- **Read**: Fetch a URL and return clean Markdown (or text).
+- **Batch Processing**: Stream a list of URLs from stdin via `--ndjson`.
 - **Skim**: Fetch a URL and return a truncated summary.
-- **Tree**: Visualize JSON/API responses as a directory tree (useful for exploring raw data).
+- **Filter**: Narrow down content by section (`--section`) or author (`--author`).
+- **Stats**: Get structural metadata and metrics (`--stats`).
+- **Explain**: diagnostic trace for extraction decisions.
+- **Tree**: Visualize JSON/API responses as a directory tree.
 - **Query**: Extract specific elements using CSS selectors.
 
 ## Usage
 
-### 1. Read URL (Default)
-Get the full content of a page, automatically formatted.
+### 1. Read & Format
+Get the full content. Supports Markdown and ASCII-only modes.
 ```bash
-dagifier read <url>
-```
-Options:
-- `--mode article`: Force article extraction (Readability).
-- `--mode thread`: Force forum thread extraction.
-- `--full`: Disable truncation.
-
-### 2. Skim URL
-Get a quick overview (first few paragraphs) to decide if it's relevant.
-```bash
-dagifier skim <url>
+dagifier read <url> --format md
+dagifier read <url> --ascii-only
 ```
 
-### 3. Query Selector
-Extract specific data points from a page.
+### 2. Batch Streaming (Unix Composability)
+Process hundreds of URLs with constant memory usage.
 ```bash
-dagifier query <url> <css_selector>
+cat urls.txt | dagifier - --ndjson > output.ndjson
 ```
 
-### 4. Tree View (for raw data)
-Visualize a JSON API response or complex structure.
+### 3. Stats & Insights
+Get block counts, author count, and structural signature.
 ```bash
-dagifier tree <url>
+dagifier <url> --stats
+```
+
+### 4. Filtering
+Extract only specific parts of the conversation or document.
+```bash
+dagifier <url> --section "Methods"
+dagifier <url> --author "JaneDoe"
+dagifier <url> --internal-only
+```
+
+### 5. Highlighting & Sorting
+Spot keywords or sort by time.
+```bash
+dagifier <url> --highlight "important term"
+dagifier <url> --sort newest
 ```
 
 ## Examples
 
-**Read a blog post:**
+**Read a thread and highlight keywords:**
 ```bash
-dagifier read https://example.com/blog/post
+dagifier https://reddit.com/r/webdev/... --highlight "Playwright"
 ```
 
-**Extract a Reddit thread:**
+**Get stats for a documentation page:**
 ```bash
-dagifier read https://reddit.com/r/webdev/comments/12345
+dagifier https://example.com/docs --stats
 ```
 
-**Get specific data:**
+**Extract only replies by a specific user:**
 ```bash
-dagifier query https://news.ycombinator.com/ ".titleline > a"
+dagifier https://news.ycombinator.com/item?id=... --author "pg"
+```
+
+**Process a filtered list of Reddit threads:**
+```bash
+grep "/r/rust" urls.txt | dagifier - --ndjson
 ```

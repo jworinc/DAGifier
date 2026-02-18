@@ -1,10 +1,14 @@
 {
   "blockers": [
-    "test"
+    "check"
   ],
-  "exit_code": 1,
+  "exit_code": 2,
   "features": [
-    "test"
+    "deps",
+    "check",
+    "build",
+    "test",
+    "run"
   ],
   "status": "fail"
 }

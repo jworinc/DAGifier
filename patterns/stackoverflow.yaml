@@ -1,0 +1,6 @@
+domain: stackoverflow.com
+transform:
+  search: "^https?://stackoverflow\\.com/questions/(\\d+)/.+"
+  replace: "https://api.stackexchange.com/2.3/questions/$1?site=stackoverflow&filter=!nKzQUR6Ysq"
+selectors:
+  root: "#content"

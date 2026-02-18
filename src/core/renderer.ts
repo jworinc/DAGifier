@@ -7,7 +7,11 @@ export interface RenderOptions {
     maxDepth?: number;
     wikilinks?: boolean;
     outline?: boolean;
-    modality?: 'text' | 'cli' | 'html' | 'web' | 'tui';
+    modality?: 'text' | 'cli' | 'html' | 'web' | 'tui' | 'markdown';
+    format?: 'text' | 'md' | 'html' | 'json';
+    asciiOnly?: boolean;
+    highlight?: string;
+    width?: number;
 }
 
 export class Renderer {
@@ -17,41 +21,140 @@ export class Renderer {
         maxDepth: 3,
         wikilinks: false,
         outline: false,
-        modality: 'text'
+        modality: 'text',
+        format: 'text',
+        asciiOnly: false,
+        highlight: '',
+        width: 80
     };
 
     render(doc: PageDoc, options?: RenderOptions): string {
         this.options = { ...this.options, ...options };
 
+        // Detect terminal width if not specified and in TTY
+        if (!options?.width && process.stdout.isTTY) {
+            this.options.width = process.stdout.columns || 80;
+        }
+
         if (this.options.modality === 'html' || this.options.modality === 'web') {
             return this.renderHtml(doc);
+        } else if (this.options.format === 'md' || this.options.modality === 'markdown') {
+            return this.renderMarkdown(doc);
         }
 
         return this.renderText(doc);
     }
 
+    private renderMarkdown(doc: PageDoc): string {
+        const lines: string[] = [];
+        // Frontmatter or Title
+        lines.push(`# ${doc.title}`);
+        if (doc.url) lines.push(`Source: [${doc.url}](${doc.url})`);
+        lines.push('');
+
+        const renderBlockMd = (block: ContentBlock): string[] => {
+            switch (block.type) {
+                case 'heading':
+                    return [`${'#'.repeat(block.level)} ${block.text}`];
+                case 'text':
+                    return block.text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                case 'quote':
+                    return block.text.split('\n').map(l => `> ${l.trim()}`);
+                case 'code':
+                    return ['```', ...block.text.split('\n'), '```'];
+                case 'list':
+                    return block.items.map(i => `- ${i}`);
+                case 'link':
+                    return [`[${block.text}](${block.url})`];
+                case 'thread-item':
+                    const indent = '> '.repeat(block.depth + 1);
+                    const author = `**${block.author || 'Anonymous'}**:`;
+                    const contentLines = block.content.flatMap(c => renderBlockMd(c));
+
+                    const itemLines = [
+                        `${indent}${author}`,
+                        ...contentLines.map(l => `${indent}${l}`),
+                        ''
+                    ];
+
+                    if (block.children) {
+                        for (const child of block.children) {
+                            itemLines.push(...renderBlockMd(child));
+                        }
+                    }
+                    return itemLines;
+                default:
+                    return [];
+            }
+        };
+
+        for (const block of doc.content) {
+            lines.push(...renderBlockMd(block));
+            lines.push('');
+        }
+
+        return lines.join('\n');
+    }
+
     private renderText(doc: PageDoc): string {
         const lines: string[] = [];
+        const width = this.options.width;
+
         // Header
-        lines.push('='.repeat(60));
+        lines.push('='.repeat(width));
         lines.push(doc.title.toUpperCase());
         if (doc.url) lines.push(`Source: ${doc.url}`);
-        lines.push('='.repeat(60));
+        lines.push('='.repeat(width));
+
+        if (doc.meta.confidence < 0.6) {
+            lines.push(` [!] WARNING: Structure Unreliable (Confidence: ${Math.floor(doc.meta.confidence * 100)}%)`);
+            doc.meta.warnings.forEach(w => lines.push(`     - ${w}`));
+            lines.push('');
+        }
         lines.push('');
 
         // Content
         for (const block of doc.content) {
-            const blockLines = this.renderBlock(block);
+            // Outline mode
             if (this.options.outline && block.type !== 'heading') continue;
+
+            const blockLines = this.renderBlock(block);
             lines.push(...blockLines);
             if (blockLines.length > 0) lines.push('');
         }
 
         // Footer
-        lines.push('-'.repeat(60));
+        lines.push('-'.repeat(width));
         lines.push(`Extracted via DAGifier | ${new Date().toISOString()}`);
 
-        return lines.join('\n');
+        const output = lines.join('\n');
+        return this.processFinalOutput(output);
+    }
+
+    private processFinalOutput(text: string): string {
+        let final = text;
+        // 1. ASCII-Only
+        if (this.options.asciiOnly) {
+            final = final.replace(/[^\x00-\x7F]/g, c => {
+                // Simple replacements
+                if (c === '—') return '--';
+                if (c === '’' || c === '‘') return "'";
+                if (c === '“' || c === '”') return '"';
+                if (c === '…') return '...';
+                return '?';
+            });
+        }
+
+        // 2. Highlight (if specified)
+        if (this.options.highlight) {
+            const term = this.options.highlight;
+            // Simple case-insensitive replacement with ANSI red
+            const regex = new RegExp(`(${term})`, 'gi');
+            // \x1b[31m = Red, \x1b[0m = Reset
+            final = final.replace(regex, '\x1b[31m$1\x1b[0m');
+        }
+
+        return final;
     }
 
     private renderHtml(doc: PageDoc): string {
@@ -107,28 +210,29 @@ export class Renderer {
     }
 
     private renderBlock(block: ContentBlock): string[] {
+        const width = this.options.width;
         switch (block.type) {
             case 'heading':
                 const headingPrefix = '#'.repeat(block.level) + ' ';
-                const wrappedHeading = this.wrapText(block.text, 60 - headingPrefix.length);
+                const wrappedHeading = this.wrapText(block.text, width - headingPrefix.length);
                 return [
                     ...wrappedHeading.map((l, i) => i === 0 ? headingPrefix + l : ' '.repeat(headingPrefix.length) + l),
-                    '-'.repeat(60)
+                    '-'.repeat(width)
                 ];
             case 'text':
-                return this.wrapText(block.text, 60);
+                return this.wrapText(block.text, width);
             case 'quote':
-                return this.wrapText(block.text, 58).map(l => `> ${l}`);
+                return this.wrapText(block.text, width - 2).map(l => `> ${l}`);
             case 'code':
                 return ['```', ...block.text.split('\n'), '```'];
             case 'list':
-                return block.items.flatMap(item => this.wrapText(`- ${item}`, 60));
+                return block.items.flatMap(item => this.wrapText(`- ${item}`, width));
             case 'link':
                 const linkText = this.options.wikilinks ? `[[${block.text}]]` : `[${block.text}](${block.url})`;
                 return [linkText];
             case 'thread-item':
-                const currentIndent = '  '.repeat(block.level);
-                const isCollapsed = !this.options.full && block.level >= this.options.maxDepth;
+                const currentIndent = '  '.repeat(block.depth);
+                const isCollapsed = !this.options.full && block.depth >= this.options.maxDepth;
                 const hasChildren = block.children && block.children.length > 0;
 
                 const statusIndicator = hasChildren ? (isCollapsed ? ' [+]' : ' [-]') : '';
@@ -145,7 +249,7 @@ export class Renderer {
                     threadLines.push(...contentLines.map(l => `${currentIndent}│ ${l}`));
                 }
 
-                threadLines.push(`${currentIndent}└${'─'.repeat(Math.max(0, 60 - currentIndent.length - 1))}`);
+                threadLines.push(`${currentIndent}└${'─'.repeat(Math.max(0, width - currentIndent.length - 1))}`);
 
                 if (!isCollapsed && block.children) {
                     for (const child of block.children) {

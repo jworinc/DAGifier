@@ -16,10 +16,6 @@ Use the included launcher script to auto-build and run:
 ```bash
 ./dagifier.sh read https://example.com
 ```
-*Note: If using ZSH, quote URLs with query parameters:*
-```bash
-./dagifier.sh 'https://example.com?id=123'
-```
 
 ### Option 2: NPM Global Install
 ```bash
@@ -27,16 +23,17 @@ npm install -g .
 dagifier read https://example.com
 ```
 
-## Features
+---
+
+## 🚀 Key Features
 
 - **Smart Extraction**: Automatically identifies the main content (article body, forum thread, etc.).
-- **Markdown-First**: Outputs clean, readable Markdown by default.
-- **Pattern-Pack Engine**: Domain-specific YAML rules for high-fidelity extraction.
-- **Threaded Rendering**: Specialized ASCII frames for nested comments and replies.
-- **Readability Fallback**: Integrated Firefox `Readability` engine for generic articles.
-- **Safe Wrapping**: Powered by `wrap-ansi` for stable, color-aware layouts.
-- **Diagnostic Tracing**: Use `--explain` to see exactly how content was identified.
-- **Unix Philosophy**: Silent on success, diagnostics to `stderr`, machine-readable `-j` output.
+- **NDJSON Streaming**: Pipe a list of URLs to `dagifier - --ndjson` for sequential, constant-memory processing.
+- **Advanced Filtering**: Use `--section`, `--author`, or `--filter` (jq syntax) to slice data.
+- **Threaded Rendering**: Specialized ASCII frames for nested comments and replies with dynamic terminal width support.
+- **Diagnostic Tracing**: Use `--explain` for deep visibility into extraction decisions.
+- **Performance Fast-Paths**: `--metadata-only`, `--no-fallback`, and `--silent` for optimized automation.
+- **Terminal Correctness**: Safe line wrapping via `wrap-ansi` and full Unicode NFC normalization.
 
 ---
 
@@ -53,85 +50,67 @@ npm run build
 
 ## 🛠 Usage (Pageview CLI)
 
-DAGifier provides a suite of task-oriented subcommands for different reading needs:
-
 ### 📖 Reading Modes
 ```bash
-# Default (Auto): Detects best view, full detail
+# Default: Detects best view, full detail
 dagifier read https://news.ycombinator.com
 
-# Skim: Truncated text, valid for quick scanning
-dagifier skim https://news.ycombinator.com
+# Skim: Truncated text, 150 char limit
+dagifier skim https://example.com
 
 # Outline: Headings and structure only
-dagifier outline https://example.com/article
+dagifier outline https://example.com
 
-# Thread: Force threaded view (depth restricted)
-dagifier thread https://news.ycombinator.com/item?id=...
+# Thread: Force threaded view with depth limits
+dagifier thread https://reddit.com/r/...
 ```
 
-### 🔍 Analysis & Tools
+### 🔗 Composability & Pipes
 ```bash
-# Links: Extract deduped link index
+# Batch process a list of URLs
+cat urls.txt | dagifier - --ndjson > results.ndjson
+
+# Extract only links from a page
 dagifier links https://example.com
 
-# Explain: Show extraction trace and signals
-dagifier explain https://example.com
-
-# Diff: Compare against a saved golden
-dagifier diff https://example.com golden_name
+# Structural Diffing
+dagifier diff URL1 URL2
 ```
 
-### 🎭 Interface Modalities
-Combine any command with `--modality` to change the output format:
+### 🔍 Analysis & Filtering
 ```bash
-# Render 'skim' mode as HTML
-dagifier skim --modality web https://example.com > preview.html
+# Show structural statistics
+dagifier https://example.com --stats
 
-# Interactive TUI for 'read' mode
-dagifier read --modality tui https://example.com
-```
+# Filter by section heading
+dagifier https://example.com --section "Methods"
 
-## 🎭 Modalities (Interface Options)
-
-DAGifier supports multiple interface modalities to suit your current environment:
-
-- **`cli`** (Default): Fast, ASCII terminal output for quick glances.
-- **`web`**: Simplified, reader-mode style HTML. High contrast and accessible.
-- **`tui`**: Interactive terminal mode. Provides "operating options" to navigate, preview, or open sources.
-
-```bash
-# Example TUI mode
-node dist/cli.js --modality tui https://news.ycombinator.com
+# Filter thread by author
+dagifier https://reddit.com/r/... --author "automoderator"
 ```
 
 ---
 
 ## 📚 Documentation
 
-Detailed documentation is available in the `docs/` directory:
-
-- [**Architecture**](docs/ARCHITECTURE.md): System design, "Thin CLI, Fat Core" philosophy, and decision logs.
-- [**CLI Reference**](docs/CLI.md): Comprehensive guide to commands, flags, and modalities.
-- [**API Integration**](docs/API.md): How to use the `Coordinator` and `PageDoc` in your own Node.js tools.
-- [**Pattern Packs**](docs/PATTERNS.md): Guide to creating custom extraction rules for specific sites.
+- [**Maximal Goals (Manifesto)**](docs/Maximal-Goals.md): The technical philosophy behind DAGifier.
+- [**CLI Reference**](docs/CLI.md): Comprehensive guide to all flags and commands.
+- [**Pattern Packs**](docs/PATTERNS.md): Creating custom rules for high-fidelity extraction.
 
 ---
 
-## 🧪 Development
-
-### Testing
-DAGifier uses a robust fixture/golden system:
+## 🧪 Development & Testing
 
 ```bash
-# Run all tests
+# Run full test suite
 npm test
 
-# Update snapshots if logic changes
-UPDATE_SNAPSHOTS=1 npm test
-```
+# Verify Terminal Correctness
+npx tsx tests/terminal_correctness.ts
 
-### Recording New Fixtures
-```bash
-dagifier record https://example.com/page my-test-case
+# Verify Batch Streaming
+bash tests/verify_streaming.sh
+
+# Self-Test (System Health)
+dagifier self-test
 ```

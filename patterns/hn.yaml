@@ -1,4 +1,7 @@
 domain: news.ycombinator.com
+transform:
+  search: "^https?://news\\.ycombinator\\.com/item\\?id=(\\d+)"
+  replace: "https://hn.algolia.com/api/v1/items/$1"
 selectors:
   root: "table.comment-tree"
   item: "tr.comtr"

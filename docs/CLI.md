@@ -34,8 +34,24 @@ Control the format of the output:
 | :--- | :--- |
 | `-j, --json` | Emit the full `PageDoc` and `Trace` as JSON. |
 | `-e, --explain` | Print human-readable extraction diagnostics (trace) to stderr. |
-| `-x, --extract` | Emit only cleaned text blocks (no metadata/structure). |
-| `-w, --wikilinks` | Format links as `[[Style]]` for Obsidian compatibility. |
+| `--format md` | Output as clean Markdown. |
+| `--stats` | Print document statistics (blocks, authors, links, etc). |
+| `--ascii-only` | Convert non-ASCII characters to closest approximations. |
+| `--highlight <term>` | Highlight occurrences of a term in red (TTY only). |
+| `--sort newest` | Reverse thread/list order (newest first). |
+
+---
+
+## Filtering Options
+
+Narrow down extraction results before rendering:
+
+| Flag | Description |
+| :--- | :--- |
+| `--section <name>` | Extract only sections matching the header name (case-insensitive). |
+| `--author <name>` | Extract only content (or thread branches) by a specific author. |
+| `--internal-only` | Filter link harvests to only show internal site links. |
+| `--external-only` | Filter link harvests to only show external outbound links. |
 
 ---
 

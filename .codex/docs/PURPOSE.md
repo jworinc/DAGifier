@@ -9,14 +9,14 @@
 <!-- CODEX:PURPOSE:BEGIN -->
 ### Current Situation
 - repo: `Dagifier` [FS]
-- generated_utc: `2026-02-17T20:03:12.167551+00:00` [FS]
-- snapshot_id: `2026-02-17T20:03:12.167551+00:00` [FS]
-- sources: lifecycle_generated_utc=2026-02-17T20:03:08.564640+00:00 health_last_attempt=- hitl_latest_updated_utc=2026-02-17T19:39:04.807037+00:00 [LCS+HST+HIT]
+- generated_utc: `2026-02-18T03:43:54.998146+00:00` [FS]
+- snapshot_id: `2026-02-18T03:43:54.998146+00:00` [FS]
+- sources: lifecycle_generated_utc=2026-02-18T03:43:50.991119+00:00 health_last_attempt=2026-02-18T03:39:44.116746+00:00 hitl_latest_updated_utc=2026-02-17T19:39:04.807037+00:00 [LCS+HST+HIT]
 
 - lifecycle: `undeclared` (candidate: `active_dev`) [LCS]
 - archetype: `spa` (inferred/medium) [LCS]
 - governance: manifest=False valid=False declared_by=-, declared_at=- [LCS]
-- execution snapshot: deps=- build=- test=- run=- check=- [HST]
+- execution snapshot: deps=skip build=- test=- run=- check=fail [HST]
 - hitl: open=1 high_open=1 decided=0/1 [HIT]
 - inference: proposed=active_dev confidence=high [INF]
 - readme_signal: title=DAGifier 🦞 summary=CLI-first, low-bandwidth ASCII page viewer.** [RSP]

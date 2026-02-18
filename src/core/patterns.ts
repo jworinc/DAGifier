@@ -14,6 +14,10 @@ export interface PatternPack {
         depthMethod?: 'attr' | 'query' | 'nested';
         depthMath?: string; // e.g. "x / 40"
     };
+    transform?: {
+        search: string;
+        replace: string;
+    };
     filters?: string[];
 }
 

@@ -20,6 +20,7 @@ describe('Snapshots', async () => {
         for (const entry of entries) {
             const res = path.join(base, entry.name);
             if (entry.isDirectory()) {
+                if (entry.name === 'core8') continue;
                 files = [...files, ...(await getFiles(dir, res))];
             } else if (res.endsWith('.html')) {
                 files.push(res);

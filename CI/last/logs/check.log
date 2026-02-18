@@ -1,0 +1,1 @@
+$ node -e "const s=require('./package.json').scripts||{}; if(!(s.lint||s.typecheck||s.check)){process.exit(2)}" && (npm run -s lint || npm run -s typecheck || npm run -s check)

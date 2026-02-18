@@ -1,0 +1,6 @@
+domain: wikipedia.org
+transform:
+  search: "^https://(\\w+)\\.wikipedia\\.org/wiki/(.+)$"
+  replace: "https://$1.wikipedia.org/api/rest_v1/page/summary/$2"
+selectors:
+  root: "#content"
