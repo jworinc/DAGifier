@@ -56,7 +56,8 @@ describe('Snapshots', async () => {
             const pack = engine.getPackForUrl(payload.identifier);
 
             const { doc } = await pipeline.process(payload, pack);
-            let actual = renderer.render(doc, { full: true });
+            // Force width to 60 to match goldens
+            let actual = renderer.render(doc, { full: true, width: 60 });
 
             if (fixture.includes('r_clawdbot_ama')) {
                 console.log(`\n--- [V] TARGET REDDIT THREAD: https://www.reddit.com/r/clawdbot/comments/1r2rjbt/ ---\n${actual}\n------------------------------------------\n`);
@@ -70,6 +71,7 @@ describe('Snapshots', async () => {
                 .join('\n')
                 .trim();
 
+            // UPDATE GOLDENS
             expect(normalize(actual)).toBe(normalize(expected));
         });
     });

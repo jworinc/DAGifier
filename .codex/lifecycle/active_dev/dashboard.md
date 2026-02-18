@@ -1,14 +1,14 @@
 # Lifecycle Dashboard: Dagifier
 
-- Generated UTC: 2026-02-18T03:43:50.991119+00:00
+- Generated UTC: 2026-02-18T17:58:40.432619+00:00
 - Repo state path: `/Users/anton/Code/Dagifier/.codex/lifecycle/active_dev`
 - Lifecycle state: `undeclared` (source: `undeclared`)
 - Inferred state candidate: `active_dev`
-- Main language lineage: `typescript` (source: `inferred`, confidence: `high`)
-- Workbench profile: `pnpm_workspace` (source: `matrix`)
-- Environment manager: `pnpm` (source: `matrix`)
-- Environment lock present: `False`
-- Environment lockfiles expected: `pnpm-lock.yaml`
+- Main language lineage: `mixed` (source: `inferred`, confidence: `low`)
+- Workbench profile: `mixed` (source: `matrix`)
+- Environment manager: `mixed` (source: `matrix`)
+- Environment lock present: `True`
+- Environment lockfiles expected: ``
 - Environment lockfiles detected: ``
 - Archetype: `spa` (source: `inferred`, confidence: `medium`)
 - Profiles: `dev`

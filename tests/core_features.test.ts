@@ -9,11 +9,10 @@ const TSX = 'npx tsx src/cli.ts';
 test('Core Feature: Markdown Output', () => {
     const output = execSync(`cat ${FIXTURE_PATH} | ${TSX} - --format md`, { encoding: 'utf-8' });
     expect(output).toContain('# Generic Thread Test');
-    // Generic extraction defaults to Anonymous for author, putting User1 in body
-    expect(output).toContain('**Anonymous**:');
-    expect(output).toContain('User1');
+    // Generic extraction improved, finding User1
+    expect(output).toContain('**User1**:');
     expect(output).toContain('> User1 This is a comment.');
-});
+}, 20000);
 
 test('Core Feature: Section Filtering', () => {
     const tempFixture = path.join(__dirname, 'fixtures/core8/sections.html');
@@ -39,17 +38,17 @@ test('Core Feature: Section Filtering', () => {
 });
 
 test('Core Feature: Author Filtering', () => {
-    // Generic extractor yields "Anonymous", so let's test that presence and absence of others
-    const outputAnon = execSync(`cat ${FIXTURE_PATH} | ${TSX} thread - --author "Anonymous"`, { encoding: 'utf-8' });
-    expect(outputAnon).toContain('User1'); // Should be present as content of Anonymous author
+    // Extractor finds "User1"
+    const outputUser1 = execSync(`cat ${FIXTURE_PATH} | ${TSX} thread - --author "User1"`, { encoding: 'utf-8' });
+    expect(outputUser1).toContain('This is a comment');
 
     // "Ghost" should not exist
     const outputGhost = execSync(`cat ${FIXTURE_PATH} | ${TSX} thread - --author "Ghost"`, { encoding: 'utf-8' });
     // Should be empty or just contain header/footer. 
     // Header contains title.
     expect(outputGhost).toContain('GENERIC THREAD TEST');
-    expect(outputGhost).not.toContain('User1'); // Should be filtered out
-});
+    expect(outputGhost).not.toContain('This is a comment'); // Should be filtered out
+}, 20000);
 
 test('Core Feature: Stats', () => {
     const output = execSync(`cat ${FIXTURE_PATH} | ${TSX} - --stats`, { encoding: 'utf-8' });

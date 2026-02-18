@@ -4,7 +4,9 @@
   "description": "",
   "type": "commonjs",
   "bin": {
-    "dagifier": "./dist/cli.js"
+    "dagifier": "./dist/cli.js",
+    "cri": "./dist/bin/cri.js",
+    "nav": "./dist/bin/nav.js"
   },
   "scripts": {
     "build": "tsc",

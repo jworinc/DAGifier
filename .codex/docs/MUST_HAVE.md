@@ -9,14 +9,14 @@
 <!-- CODEX:MUST_HAVE:BEGIN -->
 ### Checklist Snapshot
 - repo: `Dagifier` [FS]
-- generated_utc: `2026-02-18T03:43:54.998146+00:00` [FS]
-- snapshot_id: `2026-02-18T03:43:54.998146+00:00` [FS]
-- sources: lifecycle_generated_utc=2026-02-18T03:43:50.991119+00:00 health_last_attempt=2026-02-18T03:39:44.116746+00:00 hitl_latest_updated_utc=2026-02-17T19:39:04.807037+00:00 hitl_oldest_open_updated_utc=2026-02-17T19:39:04.807037+00:00 [LCS+HST+HIT]
+- generated_utc: `2026-02-18T17:58:42.826894+00:00` [FS]
+- snapshot_id: `2026-02-18T17:58:42.826894+00:00` [FS]
+- sources: lifecycle_generated_utc=2026-02-18T17:58:40.432619+00:00 health_last_attempt=- hitl_latest_updated_utc=2026-02-17T19:39:04.807037+00:00 hitl_oldest_open_updated_utc=2026-02-17T19:39:04.807037+00:00 [LCS+HST+HIT]
 
 - lifecycle_state: `undeclared` (candidate: `active_dev`) [LCS]
 - archetype: `spa` (inferred/medium) [LCS]
 - hitl_open: `1` (high: `1`) [HIT]
-- health_blockers: `SHOWSTOPPER_LOGIC_FAILURE: check failure indicates logic/contract issue. -> next: Inspect failing check log and address the first deterministic error before rerunning full core refresh.; check` [HST]
+- health_blockers: `-` [HST]
 - top_open_rules: `inference.missing_manifest(1)` [HIT]
 - stack: `js/ts` frameworks=`playwright,vitest` managers=`npm` [RSP]
 
@@ -49,15 +49,15 @@
 - [x] [LCS] Keep `.codex/project.yaml` present.
 - [x] [LCS] Keep `.codex/run-step.sh` present.
 - [ ] [LCS] Keep CI workflow present when repo is runnable.
-- [x] [HST] Dependencies step not failing.
+- [ ] [HST] Dependencies step not failing.
 - [ ] [HST] Check/lint step not failing.
 - [x] [HST] Build step not failing.
 - [x] [HST] Test step not failing.
 - [x] [HST] Run step not failing.
-- [ ] [HST] No unresolved core blockers.
+- [x] [HST] No unresolved core blockers.
 - [x] [RSP] Keep a discoverable run path (script or entrypoint).
 - [x] [RSP+LCS] Keep a discoverable test path.
-- [x] [RSP+HST] Keep a discoverable check/lint path.
+- [ ] [RSP+HST] Keep a discoverable check/lint path.
 - [x] [RSP] Keep a README title/intent signal.
 - [ ] [RSP+LCS] Keep CI workflow when source is present.
 

@@ -11,6 +11,9 @@ import { PatternEngine } from './core/patterns';
 import { BrowserAdapter } from './core/browser';
 import { PageDoc, ContentBlock } from './types';
 import { Coordinator } from './core/coordinator';
+import { ThreadManager } from './core/threads';
+import { BrowserTui } from './core/browser-tui';
+import { CriManager } from './core/cri'; // Import CRI
 import * as linkedom from 'linkedom';
 import { diffLines } from 'diff';
 import { ConfigManager } from './config';
@@ -140,6 +143,29 @@ function createProgram() {
         .argument('<input>', 'URL or file')
         .action(async (input, options, cmd) => {
             await runLinks(input, options, cmd);
+        });
+
+    program
+        .command('threads')
+        .description('Browse workspace threads (TUI)')
+        .option('-d, --date <date>', 'Filter by date (YYYY-MM-DD, today, yesterday)')
+        .option('-p, --project <id>', 'Filter by project ID')
+        .option('-a, --agent <name>', 'Filter by agent')
+        .option('-g, --grade <grade>', 'Filter by grade')
+        .option('-l, --limit <n>', 'Limit results', (v) => parseInt(v))
+        .action(async (options, cmd) => {
+            await runThreads(options, cmd);
+        });
+
+    program
+        .command('config')
+        .description('Configuration Reliability Engineering (CRI) tools')
+        .argument('<action>', 'Action: apply, rollback, status, prune')
+        .argument('[file]', 'Target config file')
+        .option('--dry-run', 'Preview changes without applying')
+        .option('--keep <n>', 'Number of backups to keep (prune only)', (v) => parseInt(v))
+        .action(async (action, file, options, cmd) => {
+            await runConfig(action, file, options, cmd);
         });
 
     program
@@ -726,6 +752,127 @@ async function runLinks(input: string, options: any, cmd: Command) {
     });
 
     pipeOutput(output, {}, false, finalOpts.viewer);
+}
+
+async function runThreads(options: any, cmd: Command) {
+    const globalOpts = cmd.parent ? cmd.parent.opts() : {};
+    const finalOpts = { ...globalOpts, ...options };
+    const config = await ConfigManager.load();
+
+    // Default threads dir from config or fallback
+    const workspaceDir = config.workspace_dir || path.join(os.homedir(), '.openclaw/workspace/threads');
+
+    try {
+        const manager = new ThreadManager(workspaceDir);
+        const items = await manager.listThreads({
+            date: finalOpts.date,
+            project: finalOpts.project,
+            agent: finalOpts.agent,
+            grade: finalOpts.grade,
+            limit: finalOpts.limit
+        });
+
+        if (items.length === 0) {
+            console.log(chalk.yellow('[i] No threads found matching filters.'));
+            return;
+        }
+
+        const selected = await BrowserTui.select(items);
+        if (selected) {
+            // Open it using runAction logic? No, open in Obsidian/Editor
+            // Match script behavior: Open in Obsidian or default app
+            const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+
+            // Try Obsidian URL scheme if configured
+            // open "obsidian://open?vault=workspace&file=threads/${SELECTION%.md}"
+
+            // For now, just open the file
+            console.log(chalk.green(`[+] Opening ${selected.title}`));
+            require('child_process').exec(`${opener} "${selected.path}"`);
+        }
+    } catch (e: any) {
+        console.error(chalk.red(`[!] Error: ${e.message}`));
+        process.exit(1);
+    }
+}
+
+async function runConfig(action: string, file: string, options: any, cmd: Command) {
+    if (!file && action !== 'status') { // Status might work without file if we infer? Nah, need file.
+        // Actually CRI works on a target file.
+        console.error(chalk.red('[!] Config file argument is required'));
+        process.exit(1);
+    }
+
+    // Resolve file
+    const target = path.resolve(file || '.'); // Fallback to . for finding? No, strict.
+    if (!file) {
+        console.error(chalk.red('[!] Config file argument is required'));
+        process.exit(1);
+    }
+
+    const cri = new CriManager(target);
+
+    try {
+        switch (action) {
+            case 'apply':
+                // Read from stdin?
+                if (process.stdin.isTTY) {
+                    // Interactive editor or paste?
+                    // CRI-ACTION.sh does "paste new content".
+                    // Here we can use $EDITOR
+                    console.log(chalk.yellow('[i] Opening editor to modify config...'));
+                    const config = await ConfigManager.load();
+                    const editor = process.env.EDITOR || config.editor || 'vi';
+
+                    // Backup first? Or edit temp copy?
+                    // Edit temp copy of current content
+                    const current = await fs.readFile(target, 'utf-8');
+                    const temp = path.join(os.tmpdir(), `cri_edit_${Date.now()}${path.extname(target)}`);
+                    await fs.writeFile(temp, current);
+
+                    const child = spawn(editor, [temp], { stdio: 'inherit' });
+                    child.on('exit', async (code) => {
+                        if (code === 0) {
+                            const newContent = await fs.readFile(temp, 'utf-8');
+                            await cri.apply(newContent, options.dryRun);
+                        } else {
+                            console.log(chalk.red('[!] Editor cancelled'));
+                        }
+                        fs.unlink(temp).catch(() => { });
+                    });
+                } else {
+                    // Pipe
+                    let chunks: any[] = [];
+                    process.stdin.on('data', c => chunks.push(c));
+                    process.stdin.on('end', async () => {
+                        const content = Buffer.concat(chunks).toString('utf-8');
+                        await cri.apply(content, options.dryRun);
+                    });
+                }
+                break;
+            case 'rollback':
+                // Optional backup ID from options? Commander args are weird.
+                // We didn't define [backupId] in args.
+                // Let's assume it might be passed or we rollback to latest.
+                // Commander: argument parsing is strict.
+                // If the user wants specific id, we might need another arg.
+                // Let's stick to latest for now, or use `status` to see IDs.
+                await cri.rollback();
+                break;
+            case 'status':
+                await cri.status();
+                break;
+            case 'prune':
+                await cri.prune(options.keep);
+                break;
+            default:
+                console.error(chalk.red(`[!] Unknown action: ${action}`));
+                process.exit(1);
+        }
+    } catch (e: any) {
+        console.error(chalk.red(`[!] Error: ${e.message}`));
+        process.exit(1);
+    }
 }
 
 async function runDiff(inputA: string, inputB: string, options: any, cmd: Command) {

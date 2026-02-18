@@ -1,0 +1,1 @@
+/Users/anton/.openclaw/workspace/scripts/semsearch/semsearch.sh

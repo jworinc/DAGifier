@@ -1,10 +1,17 @@
-version: 2
-repo: Dagifier
 name: Dagifier
-archetype: spa
+repo: Dagifier
+owner: anton
+archetype: cli
+template_ref: cli_app:0.1.0
 contract_version: 1.0.0
+lifecycle_state: active_dev
+visibility: private
+domain: terminal
+description: High-performance content extraction and ASCII rendering engine.
 commands:
-  test: node -e "const s=require('./package.json').scripts||{}; if(!s.test){console.error('missing
-    test script'); process.exit(2)}" && npm test -- --watch=false
-  check: node -e "const s=require('./package.json').scripts||{}; if(!(s.lint||s.typecheck||s.check)){process.exit(2)}"
-    && (npm run -s lint || npm run -s typecheck || npm run -s check)
+  deps: npm install
+  build: npm run build
+  test: npm test
+  run: npm start
+  check: npm run build && npm test
+version: 2

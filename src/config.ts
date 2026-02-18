@@ -9,6 +9,7 @@ export interface DagifierConfig {
     viewer: string;
     differ: string;
     browser_headless: boolean;
+    workspace_dir?: string;
     json_viewer?: string;
     markdown_viewer?: string;
 }

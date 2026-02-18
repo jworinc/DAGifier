@@ -1,116 +1,79 @@
-# DAGifier 🦞
+# Dagifier Tool Suite 🦞
 
-**CLI-first, low-bandwidth ASCII page viewer.**
+**The composable architecture for knowledge work.**
 
-DAGifier is a high-performance content extraction and ASCII rendering engine. It converts complex web pages (threads, articles, blogs) into structured ASCII representations, maintaining hierarchical relationships while minimizing bandwidth. 
+Dagifier is a suite of high-performance tools designed to bridge the gap between the chaotic web and structured, local knowledge bases. It adheres to the Unix philosophy: do one thing well, and pipe everything.
 
 > [!NOTE]
 > Designed for Unix pipes, AI agent consumption, and minimal terminal environments.
 
 ---
 
-## Quick Start
+## The Suite
 
-### Option 1: Zero-Install (Recommended)
-Use the included launcher script to auto-build and run:
-```bash
-./dagifier.sh read https://example.com
-```
+### 1. `dagifier` (Content Engine)
+The core engine. Ingests raw URLs, extracts meaningful content, and renders it as structured ASCII, Markdown, or JSON.
+- **Smart Extraction**: Heuristic-based main content detection.
+- **Thread Rendering**: ASCII visualization of nested discussions (Reddit, HN).
+- **Structure-First**: Isolates content blocks for deterministic processing.
 
-### Option 2: NPM Global Install
-```bash
-npm install -g .
-dagifier read https://example.com
-```
+### 2. `cri` (Configuration Reliability)
+**"Configuration is critical infrastructure."**
+A tool for managing local configuration files (JSON/YAML) with atomic safety.
+- **Atomic Apply**: Parse, validate, back up, and write in one transaction.
+- **Instant Rollback**: Undo changes with a single command.
+- **Audit Logging**: Track every change to your environment.
 
----
-
-## 🚀 Key Features
-
-- **Smart Extraction**: Automatically identifies the main content (article body, forum thread, etc.).
-- **NDJSON Streaming**: Pipe a list of URLs to `dagifier - --ndjson` for sequential, constant-memory processing.
-- **Advanced Filtering**: Use `--section`, `--author`, or `--filter` (jq syntax) to slice data.
-- **Threaded Rendering**: Specialized ASCII frames for nested comments and replies with dynamic terminal width support.
-- **Diagnostic Tracing**: Use `--explain` for deep visibility into extraction decisions.
-- **Performance Fast-Paths**: `--metadata-only`, `--no-fallback`, and `--silent` for optimized automation.
-- **Terminal Correctness**: Safe line wrapping via `wrap-ansi` and full Unicode NFC normalization.
+### 3. `nav` (Knowledge Navigator)
+A lightning-fast navigator for your local knowledge base (Markdown/Obsidian vaults).
+- **Sub-millisecond Search**: Optimized for large local corpora.
+- **Frontmatter Querying**: Filter by `status`, `project`, or `energy`.
+- **Terminal UI**: Browse and read files without leaving the keyboard.
 
 ---
 
-## 📦 Installation
+## 🚀 Quick Start
+
+### Installation
 
 ```bash
 git clone https://github.com/jworinc/DAGifier.git
 cd DAGifier
 npm install
 npm run build
+npm link # Links 'dagifier', 'cri', and 'nav' to your path
 ```
 
----
+### Usage Examples
 
-## 🛠 Usage (Pageview CLI)
-
-### 📖 Reading Modes
+**Read a thread:**
 ```bash
-# Default: Detects best view, full detail
-dagifier read https://news.ycombinator.com
-
-# Skim: Truncated text, 150 char limit
-dagifier skim https://example.com
-
-# Outline: Headings and structure only
-dagifier outline https://example.com
-
-# Thread: Force threaded view with depth limits
-dagifier thread https://reddit.com/r/...
+dagifier read https://news.ycombinator.com/item?id=12345
 ```
 
-### 🔗 Composability & Pipes
+**Safely edit a config:**
 ```bash
-# Batch process a list of URLs
-cat urls.txt | dagifier - --ndjson > results.ndjson
-
-# Extract only links from a page
-dagifier links https://example.com
-
-# Structural Diffing
-dagifier diff URL1 URL2
+cri apply config.json --set "theme=dark"
 ```
 
-### 🔍 Analysis & Filtering
+**Find valid tasks:**
 ```bash
-# Show structural statistics
-dagifier https://example.com --stats
-
-# Filter by section heading
-dagifier https://example.com --section "Methods"
-
-# Filter thread by author
-dagifier https://reddit.com/r/... --author "automoderator"
+nav list --status next --project P001
 ```
 
 ---
 
 ## 📚 Documentation
 
-- [**Maximal Goals (Manifesto)**](docs/Maximal-Goals.md): The technical philosophy behind DAGifier.
-- [**CLI Reference**](docs/CLI.md): Comprehensive guide to all flags and commands.
-- [**Pattern Packs**](docs/PATTERNS.md): Creating custom rules for high-fidelity extraction.
+- [**CLI Reference**](docs/CLI.md): Detailed guide for `dagifier`, `cri`, and `nav`.
+- [**Maximal Goals**](docs/Maximal-Goals.md): The technical philosophy.
+- [**Pattern Packs**](docs/PATTERNS.md): Extending extraction with custom rules.
 
 ---
 
-## 🧪 Development & Testing
+## 🧪 Development
 
+Run the comprehensive test suite:
 ```bash
-# Run full test suite
 npm test
-
-# Verify Terminal Correctness
-npx tsx tests/terminal_correctness.ts
-
-# Verify Batch Streaming
-bash tests/verify_streaming.sh
-
-# Self-Test (System Health)
-dagifier self-test
 ```

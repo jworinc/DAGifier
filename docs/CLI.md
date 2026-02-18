@@ -1,208 +1,99 @@
-# CLI Documentation
+# CLI Reference
 
-> Last updated: 2026-02-17
+> Last updated: 2026-02-18
 
 ## Overview
 
-Dagifier provides a rich CLI with multiple operating modes and output formats.
+The Dagifier suite consists of three core binaries, each designed for a specific phase of the knowledge workflow:
+
+1.  **`dagifier`**: The Content Engine (Ingest, Parse, Render).
+2.  **`cri`**: Configuration Reliability Engineering (Manage Configs).
+3.  **`nav`**: Knowledge Navigator (Browse, Search, Filter).
+
+---
+
+## 1. `dagifier` (Content Engine)
+
+The original tool for turning URLs into structured, composable ASCII/Markdown.
 
 ```bash
 dagifier [command] [options] <input>
 ```
 
----
+### Key Commands
 
-## Global Options
-
-These flags apply to all commands:
-
-| Flag | Description | Default |
+| Command | Description | Example |
 | :--- | :--- | :--- |
-| `-v, --verbose` | Enable verbose logging to stderr. Useful for debugging. | `false` |
-| `-p, --pack <domain>` | Manually specify a pattern pack domain (e.g., `reddit.com`). | Auto-detected |
-| `-r, --rendered` | Force headless browser rendering (Playwright). | `false` |
-| `-o, --outline` | Only extract headings and metadata. | `false` |
-| `--modality <name>` | Select interface modality: `text`, `html`, `tui`. | `text` (or implied) |
+| `read` (default) | Fetch and render a URL. | `dagifier read https://example.com` |
+| `skim` | Read with truncated text blocks (300 chars). | `dagifier skim https://example.com` |
+| `outline` | Extract only structure (headings/metadata). | `dagifier outline https://example.com` |
+| `thread` | Force threaded view for forums. | `dagifier thread https://reddit.com/r/...` |
+| `links` | Extract all links as a reference list. | `dagifier links https://example.com` |
+| `diff` | Compare live output vs golden file. | `dagifier diff https://example.com my-snapshot` |
 
----
-
-## Output Options
-
-Control the format of the output:
+### Key Flags
 
 | Flag | Description |
 | :--- | :--- |
-| `-j, --json` | Emit the full `PageDoc` and `Trace` as JSON. |
-| `-e, --explain` | Print human-readable extraction diagnostics (trace) to stderr. |
-| `--format md` | Output as clean Markdown. |
-| `--stats` | Print document statistics (blocks, authors, links, etc). |
-| `--ascii-only` | Convert non-ASCII characters to closest approximations. |
-| `--highlight <term>` | Highlight occurrences of a term in red (TTY only). |
-| `--sort newest` | Reverse thread/list order (newest first). |
+| `--json` | Output machine-readable JSON (PageDoc). |
+| `--ndjson` | Output newline-delimited JSON (for streaming). |
+| `--format md` | Output clean Markdown. |
+| `--section <name>` | Filter content by section heading. |
+| `--author <name>` | Filter content by author. |
+| `--stats` | Show structural statistics. |
 
 ---
 
-## Filtering Options
+## 2. `cri` (Configuration Reliability)
 
-Narrow down extraction results before rendering:
+A tool for safe, atomic configuration management. It treats configuration files as critical infrastructure, enforcing backups and validation.
+
+```bash
+cri <command> [file] [options]
+```
+
+### Commands
+
+| Command | Description | Example |
+| :--- | :--- | :--- |
+| `status` | Show file status and backup count. | `cri status config.json` |
+| `apply` | Edit and apply changes safely. | `cri apply config.json` |
+| `rollback` | Revert to the previous version. | `cri rollback config.json` |
+| `diff` | Show diff between current and backup. | `cri diff config.json` |
+| `prune` | Remove old backups (keep N). | `cri prune config.json --keep 5` |
+| `audit` | View the audit log of changes. | `cat audit.jsonl` (Managed internally) |
+
+---
+
+## 3. `nav` (Knowledge Navigator)
+
+A high-speed tool for browsing, searching, and filtering your local knowledge base (Markdown files).
+
+```bash
+nav <command> [options]
+```
+
+### Commands
+
+| Command | Description | Example |
+| :--- | :--- | :--- |
+| `list` | List threads/tasks in the workspace. | `nav list` |
+| `view` | Launch the interactive TUI. | `nav view` |
+| `search` | Semantic/Regex search across threads. | `nav search "api key" --scope config` |
+
+### Key Flags
 
 | Flag | Description |
 | :--- | :--- |
-| `--section <name>` | Extract only sections matching the header name (case-insensitive). |
-| `--author <name>` | Extract only content (or thread branches) by a specific author. |
-| `--internal-only` | Filter link harvests to only show internal site links. |
-| `--external-only` | Filter link harvests to only show external outbound links. |
+| `-C, --cwd <dir>` | Set working directory (default: current). |
+| `--json` | Output results as JSON. |
+| `--project <id>` | Filter by project ID (e.g., `P001`). |
+| `--agent <name>` | Filter by agent name. |
+| `--backend <tool>` | Select search backend (`rg`, `ug`, `grep`). |
 
----
+### Search Scopes
 
-## Output Features
-
-### Auto-Paging
-When outputting to a terminal (TTY), if the content exceeds the screen height, Dagifier automatically pipes it through `less -R`. This allows for easy scrolling without flooding your buffer.
-
-To disable this (e.g., for scripting), simply pipe the output:
-```bash
-dagifier read https://example.com | cat
-```
-
-### Syntax Highlighting
-JSON output (`-j`) is automatically syntax-highlighted when printed to a terminal.
-
-### External Viewers (`--viewer`)
-Pipe the output directly to a custom viewer or tool.
-```bash
-dagifier read https://example.com --viewer "glow -"
-dagifier read https://example.com --viewer "bat -l md"
-```
-
-### JQ Filtering (`--filter`)
-Filter JSON output on the fly without needing to pipe manually.
-```bash
-# Extract just the title
-dagifier read https://example.com --json --filter ".doc.title"
-```
-
-## Commands
-
-### `read` (Default)
-Standard reading mode. Auto-detects structure and outputs full detail.
-
-```bash
-dagifier read https://example.com/article
-```
-
-### `edit`
-Fetches content and opens it in your configured `$EDITOR` (or `vi` by default). Useful for quick "scrape and refine" workflows.
-
-```bash
-dagifier edit https://example.com/article
-```
-
-### `diff`
-Compares the current live output of a URL against a saved golden file.
-If you have configured a `differ` in `~/.dagifierrc` (e.g., `delta` or `code --diff`), it will use that tool instead of the internal simple diff.
-
-```bash
-dagifier diff https://example.com/article my-saved-snapshot
-```
-
-### `view` (Alias)
-Launches the interactive Terminal UI (TUI). Equivalent to `dagifier read --modality tui`.
-
-### `doctor`
-Checks your system for recommended external tools (`jless`, `fx`, `glow`, `bat`, `delta`) and reports their status.
-
-```bash
-dagifier doctor
-```
-
-**Auto-fix:**
-Use `--fix` to attempt to install missing tools using `brew` (macOS) or `npm`.
-
-```bash
-dagifier doctor --fix
-```
-
-### `tree`
-Visualizes the scraped content as a navigable filesystem tree using `lstr`.
-This explodes the extraction result (JSON) into a temporary directory structure where every object is a folder and every scalar is a file, allowing for intuitive exploration of complex data.
-
-```bash
-dagifier tree https://github.com/example/repo
-```
-
-```bash
-dagifier view https://example.com
-```
-
-### `skim`
-Compact mode. Truncates text blocks and limits depth to give a quick overview.
-
-```bash
-dagifier skim https://example.com/long-read -l 150
-```
-*`-l` sets the per-block character limit (default: 300).*
-
-### `outline`
-Structure only. Shows the hierarchy of headings and metadata.
-
-```bash
-dagifier outline https://example.com/complex-page
-```
-
-### `thread`
-Forces a threaded view (indented tree). Best for forums like Reddit/HN.
-
-```bash
-dagifier thread https://news.ycombinator.com/item?id=12345
-```
-
-### `links`
-Extracts and lists all links found in the content with reference IDs.
-
-```bash
-dagifier links https://example.com
-```
-
-### `record`
-**Developer Tool.** Records the HTML fixture and ASCII golden for a URL to `tests/`.
-
-```bash
-dagifier record https://example.com/page my-test-case
-```
-
-### `query`
-**Developer Tool.** Tests a CSS selector against a live URL.
-
-```bash
-dagifier query https://example.com ".content p"
-```
-
-### `diff`
-**Developer Tool.** Compares current output against a saved golden.
-
-```bash
-dagifier diff https://example.com my-test-case
-```
-
----
-
-## Modalities
-
-### Text (Default)
-Standard ASCII output to stdout.
-
-### HTML
-Generates a standalone HTML file with minimal styling.
-
-```bash
-dagifier read https://example.com --modality html > article.html
-```
-
-### TUI
-Launches an interactive Terminal UI for browsing the content.
-
-```bash
-dagifier read https://example.com --modality tui
-```
-*Controls: `v` (view), `h` (html preview), `o` (open original), `q` (quit)*
+`nav search` intelligently scopes queries based on folder structure heuristics:
+- `config`: Searches `config/`, `setup/`, `dotfiles/`.
+- `code`: Searches `src/`, `lib/`, `script/`.
+- `docs`: Searches `docs/`, `man/`.

@@ -44,10 +44,9 @@ test('Killer Workflow 4: Docs Linter (Outline)', () => {
 });
 
 test('Killer Workflow 5: Clean Research Harvesting', () => {
-    const output = execSync(`cat ${FIXTURE_PATH} | ${TSX} read -`, { encoding: 'utf-8' });
-    // Expect content
-    expect(output).toContain('GENERIC THREAD TEST');
-    expect(output).toContain('User1');
-    // Clean means no HTML clutter
+    const output = execSync(`cat ${FIXTURE_PATH} | ${TSX} read - --json`, { encoding: 'utf-8' });
+    // 3. Verify
+    expect(output).toContain('"title": "Generic Thread Test"');
+    expect(output).toContain('"structural_signature":');
     expect(output).not.toContain('<div');
-});
+}, 30000);

@@ -7,13 +7,14 @@ describe('Renderer', () => {
 
   it('should render a simple page with title and text', () => {
     const doc: PageDoc = {
+      version: '1.0',
       title: 'Test Title',
       kind: 'article',
-      meta: {},
+      meta: { confidence: 1.0, warnings: [] },
       links: [],
       content: [
-        { type: 'heading', level: 1, text: 'Header' },
-        { type: 'text', text: 'Some text content.' }
+        { id: '1', type: 'heading', level: 1, text: 'Header' },
+        { id: '2', type: 'text', text: 'Some text content.' }
       ],
       metadata: { source: 'file', mimeType: 'text/html' }
     };
@@ -26,18 +27,20 @@ describe('Renderer', () => {
 
   it('should render threaded items with author and indentation', () => {
     const doc: PageDoc = {
+      version: '1.0',
       title: 'Thread Test',
       kind: 'thread',
-      meta: {},
+      meta: { confidence: 1.0, warnings: [] },
       links: [],
       content: [
         {
+          id: '1',
           type: 'thread-item',
-          level: 0,
+          depth: 0,
           author: 'Alice',
-          content: [{ type: 'text', text: 'Hello' }],
+          content: [{ id: '1a', type: 'text', text: 'Hello' }],
           children: [
-            { type: 'thread-item', level: 1, author: 'Bob', content: [{ type: 'text', text: 'Hi Alice' }], children: [] }
+            { id: '2', type: 'thread-item', depth: 1, author: 'Bob', content: [{ id: '2a', type: 'text', text: 'Hi Alice' }], children: [] }
           ]
         }
       ],
