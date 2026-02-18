@@ -9,9 +9,9 @@
 <!-- CODEX:STRUCTURE:BEGIN -->
 ### Structure Snapshot
 - repo: `Dagifier` [FS]
-- generated_utc: `2026-02-18T17:58:42.826894+00:00` [FS]
-- snapshot_id: `2026-02-18T17:58:42.826894+00:00` [FS]
-- sources: lifecycle_generated_utc=2026-02-18T17:58:40.432619+00:00 health_last_attempt=- [LCS+HST]
+- generated_utc: `2026-02-18T18:13:22.603831+00:00` [FS]
+- snapshot_id: `2026-02-18T18:13:22.603831+00:00` [FS]
+- sources: lifecycle_generated_utc=2026-02-18T18:13:20.597307+00:00 health_last_attempt=- [LCS+HST]
 
 ### Control Surface
 - `.codex/run-step.sh <action> <domain>` [FS]
@@ -36,7 +36,7 @@
 ### Signals Used
 - lifecycle flags: source=True markers=True project_yaml=True run_step=True ci_workflow=False [LCS]
 - contract flags: interaction=False domain=False scope=False architecture=False core_tests=False [LCS]
-- artifact counts: planning=5 structured=0 mockups=0 tests=56 [LCS]
+- artifact counts: planning=5 structured=0 mockups=0 tests=52 [LCS]
 - execution statuses: deps=- build=- test=- run=- check=- [HST]
 - repo-stack: languages=js/ts frameworks=playwright,vitest package_managers=npm [RSP]
 - repo-commands: run=start test=test,test:record,test:verify check=- [RSP]

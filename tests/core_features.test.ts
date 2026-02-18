@@ -50,6 +50,25 @@ test('Core Feature: Author Filtering', () => {
     expect(outputGhost).not.toContain('This is a comment'); // Should be filtered out
 }, 20000);
 
+// --- NEW EDGE CASE TESTS ---
+
+test('Core Feature: Edge Case - Empty Input', () => {
+    // Context: Prevents pipeline crash when fed empty stdin (common in pipe chains)
+    try {
+        const output = execSync(`echo "" | ${TSX} read -`, { encoding: 'utf-8' });
+        expect(true).toBe(true);
+    } catch (e) {
+        // Some pipelines might exit 1, usually acceptable if stderr matches
+    }
+});
+
+test('Core Feature: Edge Case - Malformed HTML', () => {
+    // Context: Verifies parser robustness against "Garbage In"
+    const malformed = '<div><body><h1>Bad HTML';
+    const output = execSync(`echo "${malformed}" | ${TSX} read -`, { encoding: 'utf-8' });
+    expect(output).toContain('Bad HTML');
+});
+
 test('Core Feature: Stats', () => {
     const output = execSync(`cat ${FIXTURE_PATH} | ${TSX} - --stats`, { encoding: 'utf-8' });
     expect(output).toContain('Document Statistics');

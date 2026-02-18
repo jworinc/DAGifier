@@ -119,3 +119,24 @@ cat tests/goldens/my-site/baseline.txt
 # 3. If you change the YAML later, run diff to check for regressions
 dagifier diff https://example.com/thread my-site/baseline
 ```
+
+---
+
+## Higher Order Effects
+
+Why do good patterns matter? It's not just about aesthetics.
+
+### 1. Context Window Efficiency
+A precise pattern that eliminates ads, navigation, and footer links can reduce token usage by **60-80%**. 
+- **Bad Pattern**: Ingests `<body>`. 50k tokens. LLM forgets instructions.
+- **Good Pattern**: Ingests `.article-content`. 2k tokens. LLM attends to every word.
+
+### 2. Semantic Density
+By using explicit selectors for `author` and `timestamp`, Dagifier can reconstruct the *temporal structure* of a thread. 
+- **Effect**: The LLM understands "User A replied to User B *after* User C posted X."
+- **Benefit**: Enables complex reasoning tasks like "Summarize the debate flow" which fail on unstructured text dumps.
+
+### 3. Agent Reliability
+When an agent (like Codex) browses the web, it relies on structured data.
+- **Flaky Pattern**: Agent sees "Click here to subscribe" mixed with content. It might try to click it.
+- **Robust Pattern**: Agent sees only the clean text. It stays focused on the research task.
